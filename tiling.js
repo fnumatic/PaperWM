@@ -13,6 +13,11 @@ import {
 import { Easer, DispatcherMode } from './utils.js';
 import { ClickOverlay } from './stackoverlay.js';
 import { WorkspaceSettings } from './workspace.js';
+import {
+    fitProportionally as fitProportionallyCore,
+    allocateDefault as allocateDefaultCore,
+    allocateEqualHeight as allocateEqualHeightCore,
+} from './core/layout.js';
 
 const { signals: Signals } = imports;
 const workspaceManager = global.workspace_manager;
@@ -5281,62 +5286,28 @@ export function switchToNextFocusMode(space) {
  * "Fit" values such that they sum to `targetSum`
  */
 export function fitProportionally(values, targetSum) {
-    let sum = Lib.sum(values);
-    let weights = values.map(v => v / sum);
-
-    let fitted = Lib.zip(values, weights).map(
-        ([_h, w]) => Math.round(targetSum * w)
-    );
-    let r = targetSum - Lib.sum(fitted);
-    fitted[0] += r;
-    return fitted;
+    return fitProportionallyCore(values, targetSum);
 }
 
 export function allocateDefault(column, availableHeight, selectedWindow) {
-    if (column.length === 1) {
-        return [availableHeight];
-    } else {
-        // Distribute available height amongst non-selected windows in proportion to their existing height
-        const gap = Settings.prefs.window_gap;
-        const minHeight = 50;
+    const heightOf = mw => mw._targetHeight || mw.get_frame_rect().height;
+    const selectedIndex = selectedWindow ? column.indexOf(selectedWindow) : null;
 
-        const heightOf = mw => {
-            return mw._targetHeight || mw.get_frame_rect().height;
-        };
-
-        const k = selectedWindow && column.indexOf(selectedWindow);
-        const selectedHeight = selectedWindow && heightOf(selectedWindow);
-
-        let nonSelected = column.slice();
-        if (selectedWindow)
-            nonSelected.splice(k, 1);
-
-        const nonSelectedHeights = nonSelected.map(heightOf);
-        let availableForNonSelected = Math.max(
-            0,
-            availableHeight -
-            (column.length - 1) * gap -
-            (selectedWindow ? selectedHeight : 0)
-        );
-
-        const deficit = Math.max(
-            0, nonSelected.length * minHeight - availableForNonSelected);
-
-        let heights = fitProportionally(
-            nonSelectedHeights,
-            availableForNonSelected + deficit
-        );
-
-        if (selectedWindow)
-            heights.splice(k, 0, selectedHeight - deficit);
-
-        return heights;
-    }
+    return allocateDefaultCore({
+        heights: column.map(heightOf),
+        selectedIndex,
+        selectedHeight: selectedWindow ? heightOf(selectedWindow) : 0,
+        gap: Settings.prefs.window_gap,
+        availableHeight,
+    });
 }
 
 export function allocateEqualHeight(column, available) {
-    available -= (column.length - 1) * Settings.prefs.window_gap;
-    return column.map(_ => Math.floor(available / column.length));
+    return allocateEqualHeightCore({
+        count: column.length,
+        gap: Settings.prefs.window_gap,
+        available,
+    });
 }
 
 /**
