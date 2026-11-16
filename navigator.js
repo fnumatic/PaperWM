@@ -42,8 +42,9 @@ export function enable() {
 
 export function disable() {
     navigating = false;
-    grab = null;
+    dispatcher?.destroy();
     dispatcher = null;
+    grab = null;
     signals.destroy();
     signals = null;
     index = null;
@@ -265,6 +266,10 @@ class ActionDispatcher {
     }
 
     destroy() {
+        if (this._destroyed)
+            return;
+        this._destroyed = true;
+
         Utils.timeout_remove(this._noModsTimeoutId);
         this._noModsTimeoutId = null;
         Utils.timeout_remove(this._doActionTimeout);

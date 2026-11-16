@@ -25,6 +25,7 @@ export const EnsureViewportAnimation = { NONE: 0, TRANSLATE: 1, FADE: 2 };
 export let prefs;
 let gsettings, keybindSettings, _overriddingConflicts;
 let acceleratorParse;
+let settingsSignalIds = [];
 export function enable(extension) {
     gsettings = extension.getSettings();
     keybindSettings = extension.getSettings(KEYBINDINGS_KEY);
@@ -87,11 +88,11 @@ export function enable(extension) {
     prefs.__defineGetter__("minimum_margin", () => {
         return Math.min(15, prefs.horizontal_margin);
     });
-    gsettings.connect('changed', setState);
-
-    // connect to settings and update winprops array when it's updated
-    gsettings.connect('changed::winprops', () => reloadWinpropsFromGSettings());
-
+    settingsSignalIds = [
+        gsettings.connect('changed', setState),
+        // connect to settings and update winprops array when it's updated
+        gsettings.connect('changed::winprops', () => reloadWinpropsFromGSettings()),
+    ];
     // A intermediate window is created before the prefs dialog is created.
     // Prevent it from being inserted into the tiling causing flickering and general disorder
     defwinprop({
@@ -109,6 +110,8 @@ export function enable(extension) {
 }
 
 export function disable() {
+    settingsSignalIds.forEach(id => gsettings?.disconnect(id));
+    settingsSignalIds = [];
     gsettings = null;
     acceleratorParse = null;
     _overriddingConflicts = null;
@@ -117,6 +120,8 @@ export function disable() {
 }
 
 export function setState($, key) {
+    if (!gsettings || !prefs)
+        return;
     let value = gsettings.get_value(key);
     let name = key.replace(/-/g, '_');
     prefs[name] = value.deep_unpack();

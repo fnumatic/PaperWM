@@ -8,9 +8,10 @@
 #
 # It never touches ~/.local/share/gnome-shell/extensions or the live dconf.
 # `--devkit` is required on GNOME 51; there is no `--nested` flag anymore.
-# Extra arguments are passed to gnome-shell:
-#   ./scripts/dev-shell.sh
-#   ./scripts/dev-shell.sh --no-x11
+#
+#   ./scripts/dev-shell.sh                 # run until interrupted
+#   ./scripts/dev-shell.sh --cycle         # enable/disable three times, then exit
+#   ./scripts/dev-shell.sh --no-x11        # extra gnome-shell arguments
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -20,7 +21,35 @@ LIVE_DCONF="$HOME/.config/dconf/user"
 
 if [ "${1:-}" = "--inner" ]; then
     shift
-    exec gnome-shell --devkit --wayland --wayland-display paperwm-dev "$@"
+    cycle=0
+    if [ "${1:-}" = "--cycle" ]; then
+        cycle=1
+        shift
+    fi
+
+    gnome-shell --devkit --wayland --wayland-display paperwm-dev "$@" &
+    shell_pid=$!
+
+    if [ "$cycle" = 1 ]; then
+        for _ in $(seq 1 60); do
+            if gnome-extensions info "$UUID" >/dev/null 2>&1; then
+                break
+            fi
+            sleep 0.5
+        done
+        for n in 1 2 3; do
+            echo "cycle $n: disable"
+            gnome-extensions disable "$UUID" || true
+            sleep 1
+            echo "cycle $n: enable"
+            gnome-extensions enable "$UUID" || true
+            sleep 1
+        done
+        kill "$shell_pid" 2>/dev/null || true
+    fi
+
+    wait "$shell_pid" || true
+    exit 0
 fi
 
 if [ -L "$LIVE" ] && [ "$(readlink -f "$LIVE")" = "$ROOT" ]; then

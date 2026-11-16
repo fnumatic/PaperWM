@@ -50,11 +50,9 @@ export function enable(extension) {
 export function disable() {
     disableOverrides();
     restoreRuntimeDisables();
-    actions.forEach(a => global.stage.add_action(a));
-    actions = null;
+    actions?.forEach(a => global.stage.add_action(a));
 
-    signals.destroy();
-    signals = null;
+    signals?.destroy();
 
     savedProps = null;
     swipeTrackers = null;
@@ -63,6 +61,7 @@ export function disable() {
     Utils.timeout_remove(pillSwipeTimer);
     pillSwipeTimer = null;
     actions = null;
+    signals = null;
 }
 
 export function registerOverrideProp(obj, name, override, warn = true) {

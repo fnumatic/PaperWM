@@ -21,7 +21,11 @@ live extension symlink points here, and compares the live
 
 ```sh
 ./scripts/dev-shell.sh
+./scripts/dev-shell.sh --cycle
 ```
+
+`--cycle` disables and enables the extension three times in the isolated
+session, then exits; use it to check lifecycle cleanup in the log.
 
 Isolation uses `GSETTINGS_BACKEND=keyfile` and a private `XDG_RUNTIME_DIR`.
 Do not replace that with `dconf write`: dconf talks to the running session's

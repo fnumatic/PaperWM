@@ -120,6 +120,7 @@ let saveState;
 let startupTimeoutId, timerId, fullscreenStartTimeout, stackSlurpTimeout, workspaceChangeTimeouts;
 let monitorChangeTimeout, driftTimeout;
 let workspaceSettings;
+let settingsSignalIds = [];
 export let inGrab;
 export function enable(extension) {
     inGrab = false;
@@ -156,9 +157,11 @@ export function enable(extension) {
             return false; // on return false destroys timeout
         });
     };
-    gsettings.connect('changed::vertical-margin', marginsGapChanged);
-    gsettings.connect('changed::vertical-margin-bottom', marginsGapChanged);
-    gsettings.connect('changed::window-gap', marginsGapChanged);
+    settingsSignalIds = [
+        gsettings.connect('changed::vertical-margin', marginsGapChanged),
+        gsettings.connect('changed::vertical-margin-bottom', marginsGapChanged),
+        gsettings.connect('changed::window-gap', marginsGapChanged),
+    ];
     const changedBorder = () => {
         spaces.forEach(s => {
             Settings.prefs.selection_border_size <= 0 ? s.hideSelection() : s.showSelection();
@@ -167,10 +170,11 @@ export function enable(extension) {
             }
         });
     };
-    gsettings.connect('changed::selection-border-size', changedBorder);
-    gsettings.connect('changed::selection-border-radius-top', changedBorder);
-    gsettings.connect('changed::selection-border-radius-bottom', changedBorder);
-
+    settingsSignalIds.push(
+        gsettings.connect('changed::selection-border-size', changedBorder),
+        gsettings.connect('changed::selection-border-radius-top', changedBorder),
+        gsettings.connect('changed::selection-border-radius-bottom', changedBorder),
+    );
     backgroundGroup = Main.layoutManager._backgroundGroup;
 
     workspaceSettings = new WorkspaceSettings(extension);
@@ -256,6 +260,8 @@ export function disable() {
     displayConfig = null;
     spaces.destroy();
     inGrab = null;
+    settingsSignalIds.forEach(id => gsettings?.disconnect(id));
+    settingsSignalIds = [];
     gsettings = null;
     backgroundGroup = null;
     backgroundSettings = null;
@@ -2214,11 +2220,14 @@ border-radius: ${borderWidth}px;
         this._bgTransitionOldBackground = null;
         this.metaBackground?.destroy();
         this.metaBackground = null;
-        this.background.destroy();
+        if (this.background) {
+            Main.layoutManager.untrackChrome(this.background);
+            this.background.destroy();
+        }
         this.background = null;
-        this.cloneContainer.destroy();
+        this.cloneContainer?.destroy();
         this.cloneContainer = null;
-        this.clip.destroy();
+        this.clip?.destroy();
         this.clip = null;
     }
 }
