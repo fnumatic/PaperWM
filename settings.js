@@ -233,6 +233,7 @@ export function getSavedOverrides() {
     try {
         saveList = new Map(Object.entries(JSON.parse(saveListJson)));
     } catch (error) {
+        console.warn('Invalid saved tab state, using an empty map', error);
         saveList = new Map();
     }
     return saveList;

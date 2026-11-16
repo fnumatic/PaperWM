@@ -634,6 +634,13 @@ export class Space extends Array {
             targetHeight = planned.height;
             y = planned.y;
 
+            if (!Number.isFinite(targetWidth) || !Number.isFinite(targetHeight) || !Number.isFinite(y)) {
+                console.error(
+                    `#PaperWM skip non-finite layout for '${mw.title}'`,
+                    { targetWidth, targetHeight, y, column: windows.length });
+                continue;
+            }
+
             if (resizable) {
                 const hasNewTarget = mw._targetWidth !== targetWidth || mw._targetHeight !== targetHeight;
                 const targetReached = f.width === targetWidth && f.height === targetHeight;
@@ -966,7 +973,7 @@ export class Space extends Array {
                 w.move_frame(true, x, y);
             }
             catch (ex) {
-
+                console.warn(`position fix failed for '${w.title}'`, ex);
             }
         });
 
