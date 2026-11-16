@@ -3501,27 +3501,21 @@ export function isMaximized(metaWindow) {
     if (!metaWindow) {
         return false;
     }
-    if (typeof metaWindow.is_maximized === 'function') // GNOME >= 49
-        return metaWindow.is_maximized();
-    return metaWindow.get_maximized() === Meta.MaximizeFlags.BOTH;
+    return metaWindow.is_maximized();
 }
 
 function isMaximizedHorizontal(metaWindow) {
     if (!metaWindow) {
         return false;
     }
-    if (typeof metaWindow.get_maximize_flags === 'function') // GNOME >= 49
-        return metaWindow.get_maximize_flags() === Meta.MaximizeFlags.Horizontal;
-    return metaWindow.get_maximized() === Meta.MaximizeFlags.Horizontal;
+    return metaWindow.get_maximize_flags() === Meta.MaximizeFlags.Horizontal;
 }
 
-function unmaximize(metaWindow, flags) {
+function unmaximize(metaWindow) {
     if (!metaWindow) {
         return false;
     }
-    if (typeof metaWindow.set_unmaximize_flags === 'function') // GNOME >= 49
-        return metaWindow.set_unmaximize_flags(flags);
-    return metaWindow.unmaximize(flags);
+    return metaWindow.unmaximize();
 }
 
 export function is_override_redirect(metaWindow) {
@@ -3599,7 +3593,7 @@ export function registerWindow(metaWindow) {
 
     signals.connect(metaWindow, 'notify::maximized-horizontally', metaWindow => {
         if (Settings.prefs.maximize_within_tiling && isMaximized(metaWindow)) {
-            unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+            unmaximize(metaWindow);
 
             // restore last layout frame
             if (metaWindow._last_layout_frame) {
@@ -4263,7 +4257,7 @@ Opening "${metaWindow?.title}" on current space.`);
 
     metaWindow.unmake_above();
     if (isMaximized(metaWindow)) {
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
         toggleMaximizeHorizontally(metaWindow);
     }
 
@@ -4874,7 +4868,7 @@ export function toggleMaximizeHorizontally(metaWindow) {
 
     if (isMaximized(metaWindow)) {
         // ASSUMPTION: MaximizeFlags.HORIZONTALLY is not used
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
         metaWindow.unmaximizedRect = null;
         return;
     }
@@ -4920,7 +4914,7 @@ export function resizeHInc(metaWindow) {
     let targetY = frame.y;
 
     if (isMaximized(metaWindow)) {
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
     }
 
     // Space.layout will ensure the window is moved if necessary
@@ -4941,7 +4935,7 @@ export function resizeHDec(metaWindow) {
     let targetY = frame.y;
 
     if (isMaximized(metaWindow)) {
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
     }
 
     // Space.layout will ensure the window is moved if necessary
@@ -4961,7 +4955,7 @@ export function resizeWInc(metaWindow) {
     let targetX = frame.x;
 
     if (isMaximized(metaWindow)) {
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
     }
 
     // Space.layout will ensure the window is moved if necessary
@@ -4982,7 +4976,7 @@ export function resizeWDec(metaWindow) {
     let targetX = frame.x;
 
     if (isMaximized(metaWindow)) {
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
     }
 
     // Space.layout will ensure the window is moved if necessary
@@ -5036,7 +5030,7 @@ export function cycleWindowWidthDirection(metaWindow, direction) {
     }
 
     if (isMaximized(metaWindow)) {
-        unmaximize(metaWindow, Meta.MaximizeFlags.BOTH);
+        unmaximize(metaWindow);
     }
 
     // Space.layout will ensure the window is moved if necessary
