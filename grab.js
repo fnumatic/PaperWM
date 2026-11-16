@@ -1,6 +1,5 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
-import Graphene from 'gi://Graphene';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 
@@ -54,14 +53,13 @@ export function getVirtualKeyboard() {
 }
 
 export class MoveGrab {
-    constructor(metaWindow, type, space) {
+    constructor(metaWindow) {
         this.window = metaWindow;
-        this.type = type;
         this.signals = new Utils.Signals();
 
         this.dragDriftPx = 12;
 
-        this.initialSpace = space || Tiling.spaces.spaceOfWindow(metaWindow);
+        this.initialSpace = Tiling.spaces.spaceOfWindow(metaWindow);
         this.zoneActors = new Set();
 
         // save whether this was tiled window at start of grab
@@ -70,16 +68,12 @@ export class MoveGrab {
 
     }
 
-    begin({ center } = {}) {
+    begin() {
         console.debug("#grab", "begin");
 
-        this.center = center;
         if (grabbed)
             return;
 
-        grabbed = true;
-        global.display.end_grab_op?.(global.get_current_time());
-        setCursorGrabbing(true);
         this.dispatcher = new Navigator.getActionDispatcher(DispatcherMode.POINTER);
         this.actor = this.dispatcher.actor;
 
@@ -109,8 +103,7 @@ export class MoveGrab {
             px = (gx - clone.x) / clone.width;
             py = (gy - clone.y) / clone.height;
         }
-        !center && clone.set_pivot_point(px, py);
-        center && clone.set_pivot_point(0, 0);
+        clone.set_pivot_point(px, py);
 
         this.signals.connect(this.actor, "button-release-event", this.end.bind(this));
         this.signals.connect(this.actor, "touch-event", (act, evt) => {
@@ -132,14 +125,16 @@ export class MoveGrab {
         Navigator.getNavigator();
         Tiling.animateWindow(metaWindow);
         Easer.removeEase(space.cloneContainer);
+        // GNOME 49-51 have no end_grab_op; publish only successful setup.
+        grabbed = true;
+        setCursorGrabbing(true);
     }
 
-    beginDnD({ center } = {}) {
+    beginDnD() {
         if (this.dnd) {
             return;
         }
 
-        this.center = center;
         this.dnd = true;
         console.debug("#grab", "begin DnD");
         Navigator.getNavigator().minimaps.forEach(m => typeof m === 'number'
@@ -150,36 +145,21 @@ export class MoveGrab {
         let space = this.initialSpace;
 
         let [gx, gy] = global.get_pointer();
-        let point = {};
-        if (center) {
-            point = space.cloneContainer.apply_relative_transform_to_point(
-                global.stage, new Graphene.Point3D({ x: Math.round(clone.x), y: Math.round(clone.y) }));
-        } else {
-            // For some reason the above isn't smooth when DnD is triggered from dragging
-            let [dx, dy] = this.pointerOffset;
-            point.x = gx - dx;
-            point.y = gy - dy;
-        }
+        const [dx, dy] = this.pointerOffset;
 
         let i = space.indexOf(metaWindow);
         let single = i !== -1 && space[i].length === 1;
         space.removeWindow(metaWindow);
         Utils.actor_reparent(clone, Main.uiGroup);
-        clone.x = Math.round(point.x);
-        clone.y = Math.round(point.y);
+        clone.x = Math.round(gx - dx);
+        clone.y = Math.round(gy - dy);
         let newScale = clone.scale_x * space.actor.scale_x;
         clone.set_scale(newScale, newScale);
 
-        let params = { time: Settings.prefs.animation_time, scale_x: 0.5, scale_y: 0.5, opacity: 240 };
-        if (center) {
-            this.pointerOffset = [0, 0];
-            clone.set_pivot_point(0, 0);
-            params.x = gx;
-            params.y = gy;
-        }
-
         clone.__oldOpacity = clone.opacity;
-        Easer.addEase(clone, params);
+        Easer.addEase(clone, {
+            time: Settings.prefs.animation_time, scale_x: 0.5, scale_y: 0.5, opacity: 240,
+        });
 
         this.signals.connect(global.stage, "button-press-event", this.end.bind(this));
 
@@ -187,11 +167,11 @@ export class MoveGrab {
         let onSame = monitor === space.monitor;
 
         let [x] = space.globalToViewport(gx, gy);
-        if (!this.center && onSame && single && space[i]) {
+        if (onSame && single && space[i]) {
             Tiling.move_to(space, space[i][0], { x: x + Settings.prefs.window_gap / 2 });
-        } else if (!this.center && onSame && single && space[i - 1]) {
+        } else if (onSame && single && space[i - 1]) {
             Tiling.move_to(space, space[i - 1][0], { x: x - space[i - 1][0].clone.width - Settings.prefs.window_gap / 2 });
-        } else if (!this.center && onSame && space.length === 0) {
+        } else if (onSame && space.length === 0) {
             space.targetX = x;
             space.cloneContainer.x = x;
         }
@@ -342,6 +322,8 @@ export class MoveGrab {
     }
 
     end() {
+        if (!this.signals)
+            return;
         grabbed = null;
         Utils.timeout_remove(dragDriftTimeout);
         console.debug("#grab", "end");
@@ -394,11 +376,7 @@ export class MoveGrab {
 
                 space.targetX = space.cloneContainer.x;
                 space.selectedWindow = metaWindow;
-                if (dndTarget.position) {
-                    space.layout(true, { customAllocators: { [dndTarget.position[0]]: Tiling.allocateEqualHeight } });
-                } else {
-                    space.layout();
-                }
+                space.layout(true, { customAllocators: { [dndTarget.position[0]]: Tiling.allocateEqualHeight } });
                 Tiling.move_to(space, metaWindow, { x: x - space.monitor.x });
                 Tiling.ensureViewport(metaWindow, space);
 
@@ -496,16 +474,11 @@ export class MoveGrab {
         if (!zone) {
             return;
         }
-        const mkZoneActor = props => {
-            let actor = new St.Widget({ style_class: "tile-preview" });
-            actor.x = props.x ?? 0;
-            actor.y = props.y ?? 0;
-            actor.width = props.width ?? 0;
-            actor.height = props.height ?? 0;
-            return actor;
-        };
-
-        zone.actor = mkZoneActor({ ...zone.actorParams });
+        zone.actor = new St.Widget({
+            style_class: "tile-preview",
+            x: 0, y: 0, width: 0, height: 0,
+            ...zone.actorParams,
+        });
 
         this.zoneActors.add(zone.actor);
         const raise = () => Utils.actor_raise(zone.actor);

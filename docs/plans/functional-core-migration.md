@@ -6,9 +6,11 @@ Status: implementation underway after user approval. The original milestone
 descriptions below remain the migration roadmap, not a statement that their
 gates all passed.
 
-Progress: seven stateless modules now isolate allocation, geometry, navigation,
-arrangement, window rules, DnD and overview-layout decisions. A second review removes redundant
-inputs and corrects regressions; see [the review](../reviews/core-review.md).
+Progress: nine stateless modules now isolate allocation, geometry, navigation,
+arrangement, window rules, DnD, overview, gestures and minimap decisions.
+The adapter simplification removes redundant inputs and hypothetical viewport
+writes; see [the core review](../reviews/core-review.md) and
+[the shell review](../reviews/core-shell-review.md).
 The pure tests include dimension/slot invariants and direct adapter contract
 tests, plus a GJS import smoke. Temporary random parity scripts are not an
 independent correctness gate and are not maintained as the specification.

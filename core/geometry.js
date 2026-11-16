@@ -95,6 +95,18 @@ export function planRow({
     return { y, width, height, warnings };
 }
 
+/** Reconcile a resize request with feedback, without retrying an unchanged refusal. */
+export function reconcileRow({ before, requested, observed }) {
+    const widthChanged = observed.width !== requested.width && observed.width !== before.width;
+    const heightChanged = observed.height !== requested.height && observed.height !== before.height;
+    return {
+        width: Math.max(requested.width, observed.width),
+        // Reserve the request while pending; a synchronous adjustment becomes the new height.
+        height: heightChanged ? observed.height : Math.max(requested.height, observed.height),
+        needsRelayout: widthChanged || heightChanged,
+    };
+}
+
 /**
  * Horizontal viewport target that makes a window reachable.
  *

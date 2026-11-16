@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { fitProportionally, allocateDefault, allocateEqualHeight } from '../../core/layout.js';
 import {
     layoutWorkArea, targetWidthForColumn, planRow, ensuredX,
-    autoPanTargetX, isVisible, isFullyVisible, isPlaceable,
+    autoPanTargetX, isVisible, isFullyVisible, isPlaceable, reconcileRow, grabColumnHeights,
 } from '../../core/geometry.js';
 import { nextLinear, stepIndex } from '../../core/navigation.js';
 import { openWindowIndex, swapTarget, slurpPlan, barfTarget } from '../../core/arrangement.js';
@@ -68,6 +68,15 @@ const cases = [
         maximizedVertically: false,
         preferredWidth: freezeDeep({ value: 50, unit: '%' }),
     })],
+    ['reconcileRow', () => reconcileRow(freezeDeep({
+        before: { width: 800, height: 600 },
+        requested: { width: 400, height: 300 },
+        observed: { width: 500, height: 400 },
+    }))],
+    ['grabColumnHeights', () => grabColumnHeights(freezeDeep({
+        yGrabRel: 100, grabHeight: 300, y0: 32, gap: 10,
+        availableHeight: 1000, columnLength: 3, index: 1,
+    }))],
     ['ensuredX', () => ensuredX({
         index: 1,
         selectedIndex: 0,

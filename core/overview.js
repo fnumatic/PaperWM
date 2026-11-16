@@ -1,13 +1,20 @@
 /**
  * Pure overview layout arithmetic.
  *
- * Windows must already be sorted by the caller; ordering depends on shell
- * space state. Each window supplies `boundingBox: {width, height}` and is
- * returned unchanged in the slots.
+ * `windows` are dimension snapshots `{width, height}` in the order the caller
+ * wants them placed. Rows and slots refer back to those snapshots by index;
+ * the adapter maps the indices to Shell window previews.
  */
 
 const windowScale = (window, monitorHeight) =>
-    1.5 - 0.5 * (window.boundingBox.height / monitorHeight);
+    1.5 - 0.5 * (window.height / monitorHeight);
+
+/* Spacing separates columns; an empty row has no column separators. */
+const separators = count => Math.max(0, count - 1);
+
+/* Fit content into available space, never producing NaN or a negative scale. */
+const fitAdditional = (available, content) =>
+    content > 0 ? Math.max(0, Math.min(1, available / content)) : 1;
 
 function keepSameRow(row, width, idealRowWidth, minWindowsPerRow) {
     if (row.windows.length < minWindowsPerRow)
@@ -24,25 +31,26 @@ export function computeOverviewLayout({ windows, numRows, monitorHeight, minWind
 
     let totalWidth = 0;
     for (const window of windows)
-        totalWidth += window.boundingBox.width * windowScale(window, monitorHeight);
+        totalWidth += window.width * windowScale(window, monitorHeight);
     const idealRowWidth = totalWidth / numRows;
 
     const rows = [];
     let index = 0;
     for (let i = 0; i < numRows; i++) {
         const row = {
-            x: 0, y: 0, width: 0, height: 0,
             fullWidth: 0, fullHeight: 0, windows: [],
         };
         rows.push(row);
         for (; index < windows.length; index++) {
             const window = windows[index];
             const scale = windowScale(window, monitorHeight);
-            const width = window.boundingBox.width * scale;
-            row.fullHeight = Math.max(row.fullHeight, window.boundingBox.height * scale);
+            const width = window.width * scale;
             if (!keepSameRow(row, width, idealRowWidth, minWindowsPerRow) && i !== numRows - 1)
                 break;
-            row.windows.push(window);
+            /* Only accepted windows define the row's height. A rejected window
+             * starts the next row and must not inflate this one. */
+            row.fullHeight = Math.max(row.fullHeight, window.height * scale);
+            row.windows.push(index);
             row.fullWidth += width;
         }
     }
@@ -59,42 +67,48 @@ export function computeOverviewLayout({ windows, numRows, monitorHeight, minWind
 
 /** Scale that fits the grid into the area, capped by the configured maximum. */
 export function computeOverviewScale({ layout, area, maxScale, columnSpacing, rowSpacing }) {
-    const hspacing = (layout.maxColumns - 1) * columnSpacing;
-    const vspacing = (layout.numRows - 1) * rowSpacing;
-    const scale = Math.min(
-        (area.width - hspacing) / layout.gridWidth,
-        (area.height - vspacing) / layout.gridHeight,
-        maxScale);
-    const space = (layout.gridWidth * scale + hspacing) *
-        (layout.gridHeight * scale + vspacing) / (area.width * area.height);
+    const hspacing = separators(layout.maxColumns) * columnSpacing;
+    const vspacing = separators(layout.numRows) * rowSpacing;
+    const horizontalScale = layout.gridWidth > 0
+        ? (area.width - hspacing) / layout.gridWidth
+        : Infinity;
+    const verticalScale = layout.gridHeight > 0
+        ? (area.height - vspacing) / layout.gridHeight
+        : Infinity;
+    const scale = Math.max(0, Math.min(horizontalScale, verticalScale, maxScale));
+    const areaSize = area.width * area.height;
+    const space = areaSize > 0
+        ? Math.max(0, (layout.gridWidth * scale + hspacing) *
+            (layout.gridHeight * scale + vspacing) / areaSize)
+        : 0;
     return { scale, space };
 }
 
 /**
- * Place every window inside the area. Returns new rows because it annotates
- * them with scaled sizes and position; the caller owns the layout object.
+ * Place every window inside the area. Row annotations stay internal; the
+ * returned slots are consumed by the shell. The caller owns the layout object.
  */
 export function computeOverviewSlots({
-    layout, area, scale, maxScale, columnSpacing, rowSpacing, monitorHeight,
+    layout, windows, area, scale, maxScale, columnSpacing, rowSpacing, monitorHeight,
 }) {
     const rows = layout.rows.map(row => ({
         ...row,
-        width: row.fullWidth * scale + (row.windows.length - 1) * columnSpacing,
+        width: row.fullWidth * scale + separators(row.windows.length) * columnSpacing,
         height: row.fullHeight * scale,
     }));
 
     const heightWithoutSpacing = rows.reduce((sum, row) => sum + row.height, 0);
-    const verticalSpacing = (rows.length - 1) * rowSpacing;
-    const additionalVerticalScale = Math.min(1,
-        (area.height - verticalSpacing) / heightWithoutSpacing);
+    const verticalSpacing = separators(rows.length) * rowSpacing;
+    const additionalVerticalScale = fitAdditional(
+        area.height - verticalSpacing, heightWithoutSpacing);
 
     let compensation = 0;
     let y = 0;
     for (const row of rows) {
-        const horizontalSpacing = (row.windows.length - 1) * columnSpacing;
+        const horizontalSpacing = separators(row.windows.length) * columnSpacing;
         const widthWithoutSpacing = row.width - horizontalSpacing;
-        const additionalHorizontalScale = Math.min(1,
-            (area.width - horizontalSpacing) / widthWithoutSpacing);
+        const additionalHorizontalScale = fitAdditional(
+            area.width - horizontalSpacing, widthWithoutSpacing);
 
         row.additionalScale = Math.min(additionalHorizontalScale, additionalVerticalScale);
         if (additionalHorizontalScale < additionalVerticalScale)
@@ -113,13 +127,14 @@ export function computeOverviewSlots({
         const rowY = row.y + compensation;
         const rowHeight = row.height * row.additionalScale;
         let x = row.x;
-        for (const window of row.windows) {
+        for (const index of row.windows) {
+            const window = windows[index];
             let windowRenderScale = scale * windowScale(window, monitorHeight) * row.additionalScale;
-            const cellWidth = window.boundingBox.width * windowRenderScale;
-            const cellHeight = window.boundingBox.height * windowRenderScale;
+            const cellWidth = window.width * windowRenderScale;
+            const cellHeight = window.height * windowRenderScale;
             windowRenderScale = Math.min(windowRenderScale, maxScale);
-            const cloneWidth = window.boundingBox.width * windowRenderScale;
-            const cloneHeight = window.boundingBox.height * windowRenderScale;
+            const cloneWidth = window.width * windowRenderScale;
+            const cloneHeight = window.height * windowRenderScale;
             const cloneY = rows.length === 1
                 ? rowY + (rowHeight - cloneHeight) / 2
                 : rowY + rowHeight - cellHeight;
@@ -128,10 +143,10 @@ export function computeOverviewSlots({
                 Math.floor(cloneY),
                 cloneWidth,
                 cloneHeight,
-                window,
+                index,
             ]);
             x += cellWidth + columnSpacing;
         }
     }
-    return { slots, rows };
+    return slots;
 }

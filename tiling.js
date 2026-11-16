@@ -22,6 +22,7 @@ import {
     layoutWorkArea,
     targetWidthForColumn,
     planRow,
+    reconcileRow,
     ensuredX as ensuredXCore,
     autoPanTargetX,
     isVisible as isVisibleCore,
@@ -563,17 +564,19 @@ export class Space extends Array {
         };
     }
 
-    layoutGrabColumn(column, x, y0, targetWidth, availableHeight, time, grabWindow) {
+    layoutGrabColumn(column, x, y0, availableHeight, time, grabWindow) {
         let space = this;
         let needRelayout = false;
+        let columnWidth = 0;
 
         function mosh(windows, height, y0) {
             let targetHeights = fitProportionally(
                 windows.map(mw => mw.get_frame_rect().height),
                 height
             );
-            let [, relayout, y] = space.layoutColumnSimple(windows, x, y0, targetWidth, targetHeights, time);
-            needRelayout = needRelayout || relayout;
+            const [width, relayout, y] = space.layoutColumnSimple(windows, x, y0, f.width, targetHeights, time);
+            columnWidth = Math.max(columnWidth, width);
+            needRelayout ||= relayout;
             return y;
         }
 
@@ -585,7 +588,6 @@ export class Space extends Array {
         const gap = Settings.prefs.window_gap;
         const f = grabWindow.get_frame_rect();
         const yGrabRel = f.y - this.monitor.y;
-        targetWidth = f.width;
 
         const heights = grabColumnHeights({
             yGrabRel,
@@ -600,16 +602,16 @@ export class Space extends Array {
         let y = mosh(column.slice(k, k + 1), heights.anchor, yGrabRel);
         k + 1 < column.length && mosh(column.slice(k + 1), heights.below, y);
 
-        return [targetWidth, needRelayout];
+        return [columnWidth, needRelayout];
     }
 
     layoutColumnSimple(windows, x, y0, columnTargetWidth, targetHeights, time) {
         let space = this;
         let y = y0;
 
-        let widthChanged = false;
-        let heightChanged = false;
+        let needsRelayout = false;
         let columnWidth = 0;
+        const workAreaWidth = space.workArea().width;
 
         for (let i = 0; i < windows.length; i++) {
             let mw = windows[i];
@@ -625,9 +627,7 @@ export class Space extends Array {
                 targetHeight,
                 gap: Settings.prefs.window_gap,
                 verticalMargin: Settings.prefs.vertical_margin,
-                workAreaWidth: mw.preferredWidth?.unit === '%' && mw.preferredWidth.value > 0
-                    ? space.workArea().width
-                    : 0,
+                workAreaWidth,
                 horizontalMargin: Settings.prefs.horizontal_margin,
                 resizable,
                 frameWidth: f.width,
@@ -643,7 +643,7 @@ export class Space extends Array {
                     { targetWidth: planned.width, targetHeight: planned.height, y: planned.y, column: windows.length });
                 continue;
             }
-            let targetWidth = planned.width;
+            const targetWidth = planned.width;
             targetHeight = planned.height;
             y = planned.y;
 
@@ -664,16 +664,13 @@ export class Space extends Array {
             }
 
             // When resize is synchronous, ie. for X11 windows
-            let nf = mw.get_frame_rect();
-            if (nf.width !== targetWidth && nf.width !== f.width) {
-                widthChanged = true;
-            }
-            if (nf.height !== targetHeight && nf.height !== f.height) {
-                heightChanged = true;
-                targetHeight = nf.height; // Use actually height for layout
-            }
-            // A rejected/pending shrink must not place the next row inside this one.
-            targetHeight = Math.max(targetHeight, nf.height);
+            const observed = mw.get_frame_rect();
+            const feedback = reconcileRow({
+                before: { width: f.width, height: f.height },
+                requested: planned,
+                observed: { width: observed.width, height: observed.height },
+            });
+            needsRelayout ||= feedback.needsRelayout;
 
             let c = mw.clone;
             if (c.x !== x || c.targetX !== x ||
@@ -693,10 +690,10 @@ export class Space extends Array {
                 }
             }
 
-            columnWidth = Math.max(columnWidth, targetWidth, nf.width);
-            y += targetHeight + Settings.prefs.window_gap;
+            columnWidth = Math.max(columnWidth, feedback.width);
+            y += feedback.height + Settings.prefs.window_gap;
         }
-        return [columnWidth, widthChanged || heightChanged, y];
+        return [columnWidth, needsRelayout, y];
     }
 
     layout(animate = true, options = {}) {
@@ -712,20 +709,14 @@ export class Space extends Array {
         const centerIfOne = options?.centerIfOne ?? true;
         const callback = options?.callback;
 
-        this._inLayout = true;
-        this.startAnimate();
-
         let time = Settings.prefs.animation_time;
         let gap = Settings.prefs.window_gap;
         let x = gap; // init (ensures autostart apps in particular start properly gapped)
-        let selectedIndex = this.selectedIndex();
         let workArea = this.workArea();
 
         // Happens on monitors-changed
-        if (workArea.width === 0) {
-            this._inLayout = false;
+        if (workArea.width === 0)
             return;
-        }
 
         /**
          * If current window is fullscreened, then treat workarea as fullscreen (y = 0).
@@ -741,65 +732,62 @@ export class Space extends Array {
             showPositionBar: this.showPositionBar,
             selectedFullscreen: Boolean(this.selectedWindow?.fullscreen),
         });
-        if (this.selectedWindow?.fullscreen)
-            this.setSpaceTopbarElementsVisible(false);
-
         let availableHeight = workArea.height;
         let y0 = workArea.y;
         let fixPointAttempCount = 0;
 
-        for (let i = 0; i < this.length; i++) {
-            let column = this[i];
-            // Actorless windows are trouble. Layout could conceivable run while a window is dying or being born.
-            column = column.filter(mw => mw.get_compositor_private());
-            if (column.length === 0)
-                continue;
+        this._inLayout = true;
+        try {
+            this.startAnimate();
+            if (this.selectedWindow?.fullscreen)
+                this.setSpaceTopbarElementsVisible(false);
 
-            // selected window in column
-            const selectedInColumn = i === selectedIndex ? this.selectedWindow : null;
-
-            const widthOf = w =>
-                w?._fullscreen_frame?.tiledWidth ?? w.get_frame_rect().width;
-            const selectedWidth = selectedInColumn ? widthOf(selectedInColumn) : null;
-            const targetWidth = targetWidthForColumn({
-                widths: selectedWidth === null ? column.map(widthOf) : [],
-                selectedWidth,
-                workAreaWidth: workArea.width,
-                minimumMargin: Settings.prefs.minimum_margin,
-            });
-
-            let resultingWidth, relayout;
-            let allocator = allocators && allocators[i];
-            if (inGrab && inGrab.dnd && column.includes(inGrab.window) && !allocator) {
-                [resultingWidth, relayout] =
-                    this.layoutGrabColumn(column, x, y0, targetWidth, availableHeight, time,
-                        inGrab.window);
-            } else {
-                allocator = allocator || allocateDefault;
-                let targetHeights = allocator(column, availableHeight, selectedInColumn);
-                [resultingWidth, relayout] =
-                    this.layoutColumnSimple(column, x, y0, targetWidth, targetHeights, time);
-            }
-
-            if (relayout) {
-                if (fixPointAttempCount < 5) {
-                    i--;
-                    fixPointAttempCount++;
+            for (let i = 0; i < this.length; i++) {
+                // Layout can run while a window is dying or being born.
+                const column = this[i].filter(mw => mw.get_compositor_private());
+                if (column.length === 0)
                     continue;
+
+                const selectedInColumn = column.includes(this.selectedWindow) ? this.selectedWindow : null;
+
+                let resultingWidth, relayout;
+                const allocator = allocators?.[i];
+                if (inGrab?.dnd && column.includes(inGrab.window) && !allocator) {
+                    [resultingWidth, relayout] =
+                        this.layoutGrabColumn(column, x, y0, availableHeight, time, inGrab.window);
                 } else {
+                    const widthOf = w =>
+                        w._fullscreen_frame?.tiledWidth ?? w.get_frame_rect().width;
+                    const selectedWidth = selectedInColumn ? widthOf(selectedInColumn) : null;
+                    const targetWidth = targetWidthForColumn({
+                        widths: selectedWidth === null ? column.map(widthOf) : [],
+                        selectedWidth,
+                        workAreaWidth: workArea.width,
+                        minimumMargin: Settings.prefs.minimum_margin,
+                    });
+                    const targetHeights = (allocator ?? allocateDefault)(column, availableHeight, selectedInColumn);
+                    [resultingWidth, relayout] =
+                        this.layoutColumnSimple(column, x, y0, targetWidth, targetHeights, time);
+                }
+
+                if (relayout) {
+                    if (fixPointAttempCount < 5) {
+                        i--;
+                        fixPointAttempCount++;
+                        continue;
+                    }
                     console.warn("Bail at fixpoint, max tries reached");
                 }
+                x += resultingWidth + gap;
             }
-
-            x += resultingWidth + gap;
+        } finally {
+            this._inLayout = false;
         }
-        // final gap add - required to resolve https://github.com/paperwm/PaperWM/issues/684
-        x += gap;
 
-        this._inLayout = false;
         let oldWidth = this.cloneContainer.width;
         // One core decision replaces separate "is automatic" and target inputs.
-        let width = Math.max(1, x - gap);
+        // Keep the trailing gap after the last column.
+        let width = Math.max(1, x);
         const autoTargetX = autoPanTargetX({
             targetX: this.targetX,
             containerWidth: oldWidth,
@@ -4394,7 +4382,7 @@ export function animateDown(metaWindow) {
     });
 }
 
-export function ensuredX(meta_window, space) {
+export function ensuredX(meta_window, space, targetX = space.targetX) {
     let index = space.indexOf(meta_window);
     let last = space.selectedWindow;
     let lastIndex = space.indexOf(last);
@@ -4415,7 +4403,7 @@ export function ensuredX(meta_window, space) {
         focusMode,
         fullscreen: Boolean(meta_window.fullscreen),
         cloneTargetX: clone.targetX,
-        targetX: space.targetX,
+        targetX,
         lastFrameX: meta_window.lastFrame?.x,
         monitorX: monitor.x,
         isVisible: space.isVisible(meta_window),
@@ -4587,10 +4575,10 @@ export function grabBegin(metaWindow, type) {
         // Don't handle pushModal grabs and SCD button (close/minimize/etc.) grabs
         break;
     case Meta.GrabOp.KEYBOARD_MOVING:
-        inGrab = new Grab.MoveGrab(metaWindow, type);
         if (!isTiled(metaWindow)) {
             return;
         }
+        inGrab = new Grab.MoveGrab(metaWindow);
 
         // NOTE: Keyboard grab moves the cursor, but it happens after grab
         // signals have run. Simply delay the dnd so it will get the correct
@@ -4606,7 +4594,7 @@ export function grabBegin(metaWindow, type) {
             return;
         }
 
-        inGrab = new Grab.MoveGrab(metaWindow, type);
+        inGrab = new Grab.MoveGrab(metaWindow);
 
         if (Utils.getModiferState() & Clutter.ModifierType.CONTROL_MASK) {
             inGrab.begin();
@@ -4639,7 +4627,7 @@ export function grabBegin(metaWindow, type) {
 }
 
 export function grabEnd(_metaWindow, _type) {
-    if (!inGrab || inGrab.dnd || inGrab.grabbed)
+    if (!inGrab || inGrab.dnd || Grab.grabbed)
         return;
 
     inGrab.end();

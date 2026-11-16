@@ -9,8 +9,11 @@ import {
 } from './core/overview.js';
 
 /**
- * GNOME 45's UnalignedLayoutStrategy is not exported. This subclass keeps the
- * window order of the tiling space; the arithmetic lives in the core.
+ * GNOME 49-51 keep UnalignedLayoutStrategy private. Their layout contract is
+ * computeLayout(windows, {numRows}), computeScaleAndSpace(layout, area) and
+ * computeWindowSlots(layout, area); slots end with the WindowPreview. The
+ * opaque layout below keeps the preview order next to the pure grid, so the
+ * strategy holds no state between calls.
  */
 export class UnalignedLayoutStrategy extends Workspace.LayoutStrategy {
     computeLayout(windows, layoutParams) {
@@ -21,17 +24,24 @@ export class UnalignedLayoutStrategy extends Workspace.LayoutStrategy {
         if (layoutParams.numRows === 0)
             throw new Error(`${this.constructor.name}: No numRows given in layout params`);
 
-        return computeOverviewLayout({
-            windows: windows.slice().sort(sortWindows),
-            numRows: layoutParams.numRows,
-            monitorHeight: this._monitor.height,
-            minWindowsPerRow: Settings.prefs.overview_min_windows_per_row,
-        });
+        const sorted = windows.slice().sort(sortWindows);
+        return {
+            windows: sorted,
+            grid: computeOverviewLayout({
+                windows: sorted.map(window => ({
+                    width: window.boundingBox.width,
+                    height: window.boundingBox.height,
+                })),
+                numRows: layoutParams.numRows,
+                monitorHeight: this._monitor.height,
+                minWindowsPerRow: Settings.prefs.overview_min_windows_per_row,
+            }),
+        };
     }
 
     computeScaleAndSpace(layout, area) {
         const { scale, space } = computeOverviewScale({
-            layout,
+            layout: layout.grid,
             area,
             maxScale: Settings.prefs.overview_max_window_scale,
             columnSpacing: this._columnSpacing,
@@ -42,8 +52,13 @@ export class UnalignedLayoutStrategy extends Workspace.LayoutStrategy {
     }
 
     computeWindowSlots(layout, area) {
-        const { slots, rows } = computeOverviewSlots({
-            layout,
+        const windows = layout.windows;
+        const slots = computeOverviewSlots({
+            layout: layout.grid,
+            windows: windows.map(window => ({
+                width: window.boundingBox.width,
+                height: window.boundingBox.height,
+            })),
             area,
             scale: layout.scale,
             maxScale: Settings.prefs.overview_max_window_scale,
@@ -51,8 +66,8 @@ export class UnalignedLayoutStrategy extends Workspace.LayoutStrategy {
             rowSpacing: this._rowSpacing,
             monitorHeight: this._monitor.height,
         });
-        layout.rows = rows;
-        return slots;
+        return slots.map(([x, y, width, height, index]) =>
+            [x, y, width, height, windows[index]]);
     }
 }
 
@@ -74,8 +89,8 @@ export function sortWindows(a, b) {
 
     let spaceA = Tiling.spaces.spaceOfWindow(aw);
     let spaceB = Tiling.spaces.spaceOfWindow(bw);
-    let ia = spaceA.indexOf(aw);
-    let ib = spaceB.indexOf(bw);
+    let ia = spaceA ? spaceA.indexOf(aw) : -1;
+    let ib = spaceB ? spaceB.indexOf(bw) : -1;
     if (ia === -1 && ib === -1) {
         return aw.get_stable_sequence() - bw.get_stable_sequence();
     }

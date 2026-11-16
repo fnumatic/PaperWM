@@ -6,41 +6,18 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { Settings, Utils, Lib } from './imports.js';
 import { Easer } from './utils.js';
-
-export function calcOffset(metaWindow) {
-    let buffer = metaWindow.get_buffer_rect();
-    let frame = metaWindow.get_frame_rect();
-    let x_offset = frame.x - buffer.x;
-    let y_offset = frame.y - buffer.y;
-    return [x_offset, y_offset];
-}
+import { planMinimapLayout, planMinimapSelection } from './core/minimap.js';
 
 export class Minimap extends Array {
     constructor(space, monitor) {
         super();
         this.space = space;
-        // initial fade
-        space.getWindows()
-            .forEach(w => {
-                w.clone?.shade?.show();
-                if (w === space.selectedWindow) {
-                    return;
-                }
-
-                Easer.addEase(w.clone?.shade, {
-                    time: Settings.prefs.animation_time,
-                    opacity: Settings.prefs.minimap_shade_opacity,
-                });
-            });
-
         this.monitor = monitor;
         let actor = new St.Widget({
             name: 'minimap',
             style_class: 'paperwm-minimap switcher-list',
         });
         this.actor = actor;
-        actor.height = space.height * 0.20;
-
         let highlight = new St.Widget({
             name: 'minimap-selection',
             style_class: 'paperwm-minimap-selection item-box',
@@ -60,8 +37,6 @@ export class Minimap extends Array {
         actor.add_child(label);
         actor.add_child(clip);
         clip.add_child(container);
-        clip.set_position(12 + Settings.prefs.window_gap, 12 + Math.round(1.5 * Settings.prefs.window_gap));
-        highlight.y = clip.y - 10;
         Main.uiGroup.add_child(this.actor);
         this.actor.opacity = 0;
         this.createClones();
@@ -103,7 +78,6 @@ export class Minimap extends Array {
         column.splice(row, 1);
         if (column.length === 0)
             this.splice(index, 1);
-        // this.container.remove_child(clone);
         Utils.actor_remove_child(this.container, clone);
         this.layout();
     }
@@ -152,10 +126,8 @@ export class Minimap extends Array {
         const windowActor = mw.get_compositor_private();
         const clone = new Clutter.Clone({ source: windowActor });
         const container = new Clutter.Actor({
-            // layout_manager: new WindowCloneLayout(this),
             name: "window-clone-container",
         });
-        clone.meta_window = mw;
         container.clone = clone;
         container.meta_window = mw;
         container.add_child(clone);
@@ -163,112 +135,103 @@ export class Minimap extends Array {
         return container;
     }
 
-    _allocateClone(container) {
-        let clone = container.clone;
-        let meta_window = clone.meta_window;
-        let buffer = meta_window.get_buffer_rect();
-        let frame = meta_window.get_frame_rect();
-        let scale = Settings.prefs.minimap_scale;
-        clone.set_size(buffer.width * scale, buffer.height * scale - Settings.prefs.window_gap);
-        clone.set_position((buffer.x - frame.x) * scale, (buffer.y - frame.y) * scale);
-        container.set_size(frame.width * scale, frame.height * scale);
-    }
-
     layout() {
         if (this.destroyed)
             return;
-        let gap = Settings.prefs.window_gap;
-        let x = 0;
-        for (let column of this) {
-            let y = 0, w = 0;
-            for (let c of column) {
-                c.set_position(x, y);
-                this._allocateClone(c);
-                w = Math.max(w, c.width);
-                y += c.height;
+
+        const rect = value => ({
+            x: value.x,
+            y: value.y,
+            width: value.width,
+            height: value.height,
+        });
+        const plan = planMinimapLayout({
+            columns: this.map(column => column.map(container => {
+                const metaWindow = container.meta_window;
+                return {
+                    buffer: rect(metaWindow.get_buffer_rect()),
+                    frame: rect(metaWindow.get_frame_rect()),
+                };
+            })),
+            monitor: rect(this.monitor),
+            scale: Settings.prefs.minimap_scale,
+            gap: Settings.prefs.window_gap,
+        });
+        this.plan = plan;
+
+        for (let i = 0; i < this.length; i++) {
+            for (let j = 0; j < this[i].length; j++) {
+                const container = this[i][j];
+                const geometry = plan.columns[i][j];
+                container.set_position(geometry.x, geometry.y);
+                container.set_size(geometry.container.width, geometry.container.height);
+                container.clone.set_position(geometry.clone.x, geometry.clone.y);
+                container.clone.set_size(geometry.clone.width, geometry.clone.height);
             }
-            x += w + gap;
         }
 
-        this.clip.width = Math.min(this.container.width,
-            this.monitor.width - this.clip.x * 2 - 24);
-        this.actor.width = this.clip.width + this.clip.x * 2;
-        this.clip.set_clip(0, 0, this.clip.width, this.clip.height);
-        this.label.set_style(`max-width: ${this.clip.width}px;`);
-        this.actor.set_position(
-            this.monitor.x + Math.floor((this.monitor.width - this.actor.width) / 2),
-            this.monitor.y + Math.floor((this.monitor.height - this.actor.height) / 2));
+        this.container.set_size(plan.content.width, plan.content.height);
+        this.clip.set_size(plan.clip.width, plan.clip.height);
+        this.clip.set_position(plan.clip.x, plan.clip.y);
+        this.clip.set_clip(0, 0, plan.clip.width, plan.clip.height);
+        this.actor.set_size(plan.actor.width, plan.actor.height);
+        this.actor.set_position(plan.actor.x, plan.actor.y);
+        this.label.set_style(`max-width: ${plan.clip.width}px;`);
         this.select();
     }
 
     select() {
-        let position = this.space.positionOf();
-        let highlight = this.highlight;
-        if (!position) {
+        const position = this.space.positionOf();
+        const selected = position && this[position[0]]?.[position[1]];
+        if (!selected || !this.plan) {
             this.highlight.hide();
+            this.label.hide();
             return;
         }
-        let [index, row] = position;
-        if (!(index in this && row in this[index]))
-            return;
-        highlight.show();
-        let clip = this.clip;
-        let container = this.container;
-        let label = this.label;
-        let selected = this[index][row];
-        if (!selected)
-            return;
 
-        this.space.getWindows().forEach(w => {
-            const shade = w.clone.shade;
-            // if selected
-            if (w === selected.meta_window) {
+        const metaWindow = selected.meta_window;
+        this.label.text = metaWindow.title;
+        // The allocation is one frame behind a text change; measure the new text.
+        const [, labelWidth] = this.label.get_preferred_width(-1);
+        const selection = planMinimapSelection({
+            layout: this.plan,
+            position,
+            labelWidth,
+            gap: Settings.prefs.window_gap,
+            containerX: this.container.x,
+        });
+        if (!selection.visible) {
+            this.highlight.hide();
+            this.label.hide();
+            return;
+        }
+
+        this.highlight.show();
+        this.label.show();
+        this.container.x = selection.containerX;
+        this.highlight.x = selection.highlight.x;
+        this.highlight.y = selection.highlight.y;
+        this.highlight.set_size(selection.highlight.width, selection.highlight.height);
+        this.label.set_position(selection.label.x, selection.label.y);
+
+        const shadeOpacity = Settings.prefs.minimap_shade_opacity;
+        const animationTime = Settings.prefs.animation_time;
+        for (const window of this.space.getWindows()) {
+            const shade = window.clone?.shade;
+            if (!shade)
+                continue;
+
+            shade.show();
+            if (window === metaWindow) {
                 shade.opacity = 0;
-                return;
+                continue;
             }
 
-            // others
             Easer.addEase(shade, {
-                time: Settings.prefs.animation_time,
-                opacity: Settings.prefs.minimap_shade_opacity,
+                time: animationTime,
+                opacity: shadeOpacity,
             });
-        });
-
-        label.text = selected.meta_window.title;
-
-        if (selected.x + selected.width + container.x > clip.width) {
-            // Align right edge of selected with the clip
-            container.x = clip.width - (selected.x + selected.width);
-            container.x -= 500; // margin
         }
-        if (selected.x + container.x < 0) {
-            // Align left edge of selected with the clip
-            container.x = -selected.x;
-            container.x += 500; // margin
-        }
-
-        if (container.x + container.width < clip.width)
-            container.x = clip.width - container.width;
-
-        if (container.x > 0)
-            container.x = 0;
-
-        let gap = Settings.prefs.window_gap;
-        highlight.x = Math.round(
-            clip.x + container.x + selected.x - gap / 2);
-        highlight.y = Math.round(
-            clip.y + selected.y - Settings.prefs.window_gap);
-        highlight.set_size(Math.round(selected.width + gap),
-            Math.round(Math.min(selected.height, this.clip.height + gap) + gap));
-
-        let x = highlight.x + (highlight.width - label.width) / 2;
-        if (x + label.width > clip.x + clip.width)
-            x = clip.x + clip.width - label.width + 5;
-        if (x < 0)
-            x = clip.x - 5;
-
-        label.set_position(Math.round(x), this.clip.y + this.clip.height + 8);
-        this.actor.height = this.clip.y + this.clip.height + 40;
     }
 
     destroy() {
@@ -285,6 +248,7 @@ export class Minimap extends Array {
         this.destroyed = true;
         this.signals.destroy();
         this.signals = null;
+        this.plan = null;
         this.splice(0, this.length);
         this.actor.destroy();
         this.actor = null;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { planRow } from '../../core/geometry.js';
+import { planRow, reconcileRow } from '../../core/geometry.js';
 
 const base = {
     y: 32,
@@ -84,4 +84,30 @@ test('planRow does not mutate its input', () => {
     const copy = structuredClone(input);
     planRow(input);
     assert.deepEqual(input, copy);
+});
+
+test('resize feedback distinguishes completion, pending work and synchronous constraints', () => {
+    const before = Object.freeze({ width: 800, height: 600 });
+    const requested = Object.freeze({ width: 500, height: 400 });
+    assert.deepEqual(reconcileRow({ before, requested, observed: requested }), {
+        width: 500, height: 400, needsRelayout: false,
+    });
+    assert.deepEqual(reconcileRow({ before, requested, observed: before }), {
+        width: 800, height: 600, needsRelayout: false,
+    });
+    const observed = Object.freeze({ width: 550, height: 450 });
+    assert.deepEqual(reconcileRow({ before, requested, observed }), {
+        width: 550, height: 450, needsRelayout: true,
+    });
+});
+
+test('a pending growth reserves the requested size but accepted feedback takes precedence', () => {
+    const before = { width: 500, height: 400 };
+    const requested = { width: 800, height: 600 };
+    assert.deepEqual(reconcileRow({ before, requested, observed: before }), {
+        width: 800, height: 600, needsRelayout: false,
+    });
+    assert.deepEqual(reconcileRow({ before, requested, observed: { width: 750, height: 550 } }), {
+        width: 800, height: 550, needsRelayout: true,
+    });
 });

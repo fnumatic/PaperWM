@@ -6,8 +6,16 @@ import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import { Patches, Settings, Tiling, Utils, Lib, Navigator } from './imports.js';
+import { Patches, Settings, Tiling, Utils, Navigator } from './imports.js';
 import { Easer } from './utils.js';
+import {
+    addSwipeSample,
+    adjustGlideDuration,
+    projectGlide,
+    selectTargetWindow,
+    snapGlideTarget,
+    swipeVelocity,
+} from './core/gestures.js';
 
 const DIRECTIONS = {
     Horizontal: true,
@@ -225,7 +233,8 @@ export function gestureWorkspaceFingers() {
    Handle scrolling horizontally in a space. The handler is meant to be
    connected from each space.background and bound to the space.
  */
-let start, dxs = [], dts = [];
+let start;
+let samples = [];
 export function horizontalScroll(space, _actor, event) {
     if (event.type() !== Clutter.EventType.TOUCHPAD_SWIPE) {
         return Clutter.EVENT_PROPAGATE;
@@ -257,8 +266,7 @@ export function horizontalScroll(space, _actor, event) {
 
         if (direction === undefined) {
             space.vx = 0;
-            dxs = [];
-            dts = [];
+            samples = [];
             space.hState = phase;
             start = space.targetX;
             Easer.removeEase(space.cloneContainer);
@@ -272,8 +280,7 @@ export function horizontalScroll(space, _actor, event) {
         }
         space.hState = phase;
         done(space, event);
-        dxs = [];
-        dts = [];
+        samples = [];
         direction = undefined;
         return Clutter.EVENT_STOP;
     }
@@ -293,8 +300,7 @@ export function horizontalTouchScroll(_actor, event) {
     switch (type) {
     case Clutter.EventType.TOUCH_BEGIN:
         this.vx = 0;
-        dxs = [];
-        dts = [];
+        samples = [];
         sdx = myx;
         walk = 0;
         start = this.targetX;
@@ -302,7 +308,7 @@ export function horizontalTouchScroll(_actor, event) {
         Easer.removeEase(this.cloneContainer);
         navigator = Navigator.getNavigator();
         direction = DIRECTIONS.Horizontal;
-        update(this, 0, event.get_time());
+        update(this, 0, event.get_time() * .75);
         return Clutter.EVENT_PROPAGATE;
     case Clutter.EventType.TOUCH_UPDATE: {
         let dx = 0;
@@ -321,44 +327,39 @@ export function horizontalTouchScroll(_actor, event) {
         return Clutter.EVENT_PROPAGATE;
     }
     case Clutter.EventType.TOUCH_CANCEL:
-    case Clutter.EventType.TOUCH_END:
+    case Clutter.EventType.TOUCH_END: {
+        const swiped = walk >= 20;
         done(this, event);
-        dxs = [];
-        dts = [];
+        samples = [];
         sdx = null;
         walk = 0;
         this.hState = Clutter.TouchpadGesturePhase.END;
-        if (walk < 20)
-            return Clutter.EVENT_PROPAGATE; // Don't steal non-swipe events
-        else
-            return Clutter.EVENT_STOP;
+        return swiped ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
+    }
     }
 }
 
 export function update(space, dx, t) {
-    dxs.push(dx);
-    dts.push(t);
+    samples = addSwipeSample(samples, { dx, time: t });
 
     space.cloneContainer.x -= dx;
     space.targetX = space.cloneContainer.x;
 
     // Check which target window will be selected if we release the swipe at this
-    // moment
-    dx = Lib.sum(dxs.slice(-3));
-    let v = dx / (t - dts.slice(-3)[0]);
-    if (Number.isFinite(v)) {
-        space.vx = v;
-    }
+    // moment.
+    const velocity = swipeVelocity({ samples, fallback: space.vx });
+    if (velocity !== null)
+        space.vx = velocity;
 
-    let accel = Settings.prefs.swipe_friction[0] / 16; // px/ms^2
-    accel = space.vx > 0 ? -accel : accel;
-    let duration = -space.vx / accel;
-    let d = space.vx * duration + .5 * accel * duration ** 2;
-    let target = Math.round(space.targetX - d);
-
-    space.targetX = target;
-    const selected = findTargetWindow(space, start - space.targetX > 0);
-    space.targetX = space.cloneContainer.x;
+    const projection = projectGlide({
+        targetX: space.targetX,
+        velocity: space.vx,
+        friction: Settings.prefs.swipe_friction[0],
+    });
+    const selected = findTargetWindow(
+        space,
+        start - projection.targetX > 0 ? 1 : -1,
+        projection.targetX);
     Tiling.updateSelection(space, selected);
     space.selectedWindow = selected;
     space.emit('select');
@@ -376,51 +377,47 @@ export function done(space) {
     let startGlide = space.targetX;
 
     // timetravel
-    let accel = Settings.prefs.swipe_friction[0] / 16; // px/ms^2
-    accel = space.vx > 0 ? -accel : accel;
-    let t = -space.vx / accel;
-    let d = space.vx * t + .5 * accel * t ** 2;
-    let target = Math.round(space.targetX - d);
-
-    let mode = Clutter.AnimationMode.EASE_OUT_QUAD;
-    let first;
-    let last;
-
-    let full = space.cloneContainer.width > space.width;
-    // Only snap to the edges if we started gliding when the viewport is fully covered
-    let snap = !(space.targetX >= 0 ||
-                 space.targetX + space.cloneContainer.width <= space.width);
-    if ((snap && target > 0) ||
-        (full && target > space.width * 2)) {
-        // Snap to left edge
-        first = space[0][0];
-        target = 0;
-        mode = Clutter.AnimationMode.EASE_OUT_BACK;
-    } else if ((snap && target + space.cloneContainer.width < space.width) ||
-               (full && target + space.cloneContainer.width < -space.width)) {
-        // Snap to right edge
-        last = space[space.length - 1][0];
-        target = space.width - space.cloneContainer.width;
-        mode = Clutter.AnimationMode.EASE_OUT_BACK;
-    }
+    const projection = projectGlide({
+        targetX: space.targetX,
+        velocity: space.vx,
+        friction: Settings.prefs.swipe_friction[0],
+    });
+    const snap = snapGlideTarget({
+        targetX: projection.targetX,
+        scrollX: space.targetX,
+        containerWidth: space.cloneContainer.width,
+        viewportWidth: space.width,
+    });
+    let target = snap.targetX;
+    const mode = snap.anchor
+        ? Clutter.AnimationMode.EASE_OUT_BACK
+        : Clutter.AnimationMode.EASE_OUT_QUAD;
+    const first = snap.anchor === 'first' ? space[0][0] : undefined;
+    const last = snap.anchor === 'last'
+        ? space[space.length - 1][0]
+        : undefined;
 
     // Adjust for target window
-    let selected;
-    space.targetX = Math.round(target);
-    selected = last || first || findTargetWindow(space, start - target > 0 );
+    const selectionTarget = Math.round(target);
+    const selected = last || first ||
+        findTargetWindow(space, start - target > 0 ? 1 : -1, selectionTarget);
+    if (!selected) {
+        navigator?.finish();
+        space.hState = -1;
+        return Clutter.EVENT_STOP;
+    }
     delete selected.lastFrame; // Invalidate frame information
-    let x = Tiling.ensuredX(selected, space);
+    let x = Tiling.ensuredX(selected, space, selectionTarget);
     target = x - selected.clone.targetX;
 
-    // Scale down travel time if we've cut down the discance to travel
-    let newD = Math.abs(startGlide - target);
-    if (newD < Math.abs(d))
-        t *= Math.abs(newD / d);
-
-    // Use a minimum duration if we've adjusted travel
-    if (target !== space.targetX || mode === Clutter.AnimationMode.EASE_OUT_BACK) {
-        t = Math.max(t, 200);
-    }
+    const t = adjustGlideDuration({
+        duration: projection.duration,
+        distance: projection.distance,
+        startX: startGlide,
+        targetX: target,
+        projectedTarget: selectionTarget,
+        snapped: Boolean(snap.anchor),
+    });
     space.targetX = target;
 
     Tiling.updateSelection(space, selected);
@@ -442,71 +439,35 @@ export function done(space) {
 }
 
 /**
- * Finds a target window given a space and direction (-1 is left, 1 is right)
+ * Finds a target window given a space and direction (-1 is left, 1 is right).
+ *
+ * `targetX` overrides the space's live scroll position for the decision, so
+ * callers never need to assign a projected position first.
  * @param {Tiling.Space} space
- * @param {Boolean} direction
+ * @param {Number|Boolean} direction -1/false left, 1/true right
+ * @param {Number} [targetX]
  * @returns
  */
-export function findTargetWindow(space, direction) {
-    let selected = space.selectedWindow?.clone;
-    if (!selected) {
-        return;
-    }
+export function findTargetWindow(space, direction, targetX = space.targetX) {
+    const windows = space.getWindows();
+    const selectedWindow = space.selectedWindow;
+    const selectedIndex = selectedWindow ? windows.indexOf(selectedWindow) : -1;
+    const clone = selectedWindow?.clone;
+    const selected = selectedIndex >= 0 && clone
+        ? { index: selectedIndex, x: clone.x, width: clone.width }
+        : null;
 
-    if (selected.x + space.targetX >= 0 &&
-          selected.x + selected.width + space.targetX <= space.width) {
-        return selected.meta_window;
-    }
-    selected = selected && space.selectedWindow;
-    let workArea = space.workArea();
-    let min = workArea.x;
-
-    let windows = space.getWindows().filter(w => {
-        let  clone = w.clone;
-        let x = clone.targetX + space.targetX;
-        return !(x + clone.width < min ||
-                 x > min + workArea.width);
+    const index = selectTargetWindow({
+        windows: windows.map(window => ({
+            x: window.clone.targetX,
+            width: window.clone.width,
+        })),
+        selected,
+        targetX,
+        workArea: space.workArea(),
+        direction: direction === 1 || direction === true,
     });
-    if (!direction) // scroll left
-        windows.reverse();
-    let visible = windows.filter(w => {
-        let clone = w.clone;
-        let x = clone.targetX + space.targetX;
-        return x >= 0 &&
-            x + clone.width <= min + workArea.width;
-    });
-    if (visible.length > 0) {
-        return visible[0];
-    }
-
-    if (windows.length === 0) {
-        let first = space.getWindow(0, 0);
-        let last = space.getWindow(space.length - 1, 0);
-        if (direction) {
-            return last;
-        } else {
-            return first;
-        }
-    }
-
-    if (windows.length === 1)
-        return windows[0];
-
-    let closest = windows[0].clone;
-    let next = windows[1].clone;
-    let r1, r2;
-    if (direction) { // ->
-        r1 = Math.abs(closest.targetX + closest.width + space.targetX) / closest.width;
-        r2 = Math.abs(next.targetX + space.targetX - space.width) / next.width;
-    } else {
-        r1 = Math.abs(closest.targetX + space.targetX - space.width) / closest.width;
-        r2 = Math.abs(next.targetX + next.width + space.targetX) / next.width;
-    }
-    // Choose the window the most visible width (as a ratio)
-    if (r1 > r2)
-        return closest.meta_window;
-    else
-        return next.meta_window;
+    return index === null ? undefined : windows[index];
 }
 
 let transition = 'easeOutQuad';
