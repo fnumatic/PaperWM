@@ -327,144 +327,150 @@ export class MoveGrab {
         grabbed = null;
         Utils.timeout_remove(dragDriftTimeout);
         console.debug("#grab", "end");
-        this.signals.destroy();
-        this.signals = null;
+        try {
+            this.signals.destroy();
+            this.signals = null;
 
-        let metaWindow = this.window;
-        let actor = metaWindow.get_compositor_private();
-        let clone = metaWindow.clone;
-        let [gx, gy] = global.get_pointer();
+            let metaWindow = this.window;
+            let actor = metaWindow.get_compositor_private();
+            let clone = metaWindow.clone;
+            let [gx, gy] = global.get_pointer();
 
-        this.zoneActors.forEach(actor => actor.destroy());
-        let params = {
-            time: Settings.prefs.animation_time,
-            scale_x: 1,
-            scale_y: 1,
-            opacity: clone?.__oldOpacity ?? 255,
-        };
+            this.zoneActors.forEach(actor => actor.destroy());
+            let params = {
+                time: Settings.prefs.animation_time,
+                scale_x: 1,
+                scale_y: 1,
+                opacity: clone?.__oldOpacity ?? 255,
+            };
 
-        if (clone && this.dnd) {
-            const dndTarget = this.dndTarget;
-            if (dndTarget) {
-                const space = dndTarget.space;
-                space.showSelection();
+            if (clone && this.dnd) {
+                const dndTarget = this.dndTarget;
+                if (dndTarget) {
+                    const space = dndTarget.space;
+                    space.showSelection();
 
-                if (Scratch.isScratchWindow(metaWindow)) {
-                    Scratch.unmakeScratch(metaWindow);
+                    if (Scratch.isScratchWindow(metaWindow)) {
+                        Scratch.unmakeScratch(metaWindow);
+                    }
+
+                    // Remember the global coordinates of the clone
+                    let [x] = clone.get_position();
+                    space.addWindow(metaWindow, ...dndTarget.position);
+
+                    let [sx, sy] = space.globalToScroll(gx, gy);
+                    let [dx, dy] = this.pointerOffset;
+                    clone.x = sx - dx;
+                    clone.y = sy - dy;
+                    let newScale = clone.scale_x / space.actor.scale_x;
+                    clone.set_scale(newScale, newScale);
+
+                    actor.set_scale(1, 1);
+                    actor.set_pivot_point(0, 0);
+
+                    // Tiling.animateWindow(metaWindow);
+                    params.onStopped = () => {
+                        space.moveDone();
+                        clone.set_pivot_point(0, 0);
+                    };
+                    Easer.addEase(clone, params);
+
+                    space.targetX = space.cloneContainer.x;
+                    space.selectedWindow = metaWindow;
+                    space.layout(true, { customAllocators: { [dndTarget.position[0]]: Tiling.allocateEqualHeight } });
+                    Tiling.move_to(space, metaWindow, { x: x - space.monitor.x });
+                    Tiling.ensureViewport(metaWindow, space);
+
+                    Utils.actor_raise(clone);
+                }
+                else if (clone) {
+                    metaWindow.move_frame(true, clone.x, clone.y);
+                    Scratch.makeScratch(metaWindow);
+                    this.initialSpace.moveDone();
+                    this.initialSpace.showSelection();
+
+                    actor.set_scale(clone.scale_x, clone.scale_y);
+                    actor.opacity = clone.opacity;
+
+                    clone.opacity = clone.__oldOpacity || 255;
+                    clone.set_scale(1, 1);
+                    clone.set_pivot_point(0, 0);
+
+                    const halftime = 0.5 * Settings.prefs.animation_time;
+                    params.time = halftime;
+                    params.onComplete = () => {
+                        Easer.addEase(actor, {
+                            time: halftime,
+                            onComplete: () => {
+                                Scratch.unmakeScratch(metaWindow);
+                            },
+                        });
+                    };
+                    Easer.addEase(actor, params);
                 }
 
-                // Remember the global coordinates of the clone
-                let [x] = clone.get_position();
-                space.addWindow(metaWindow, ...dndTarget.position);
-
-                let [sx, sy] = space.globalToScroll(gx, gy);
-                let [dx, dy] = this.pointerOffset;
-                clone.x = sx - dx;
-                clone.y = sy - dy;
-                let newScale = clone.scale_x / space.actor.scale_x;
-                clone.set_scale(newScale, newScale);
+                Navigator.getNavigator().accept();
+            }
+            else if (
+                clone &&
+                this.initialSpace.indexOf(metaWindow) !== -1) {
+                let space = this.initialSpace;
+                space.targetX = space.cloneContainer.x;
 
                 actor.set_scale(1, 1);
                 actor.set_pivot_point(0, 0);
 
-                // Tiling.animateWindow(metaWindow);
+                Tiling.animateWindow(metaWindow);
                 params.onStopped = () => {
                     space.moveDone();
                     clone.set_pivot_point(0, 0);
                 };
                 Easer.addEase(clone, params);
 
-                space.targetX = space.cloneContainer.x;
-                space.selectedWindow = metaWindow;
-                space.layout(true, { customAllocators: { [dndTarget.position[0]]: Tiling.allocateEqualHeight } });
-                Tiling.move_to(space, metaWindow, { x: x - space.monitor.x });
                 Tiling.ensureViewport(metaWindow, space);
-
-                Utils.actor_raise(clone);
-            }
-            else if (clone) {
-                metaWindow.move_frame(true, clone.x, clone.y);
-                Scratch.makeScratch(metaWindow);
-                this.initialSpace.moveDone();
-                this.initialSpace.showSelection();
-
-                actor.set_scale(clone.scale_x, clone.scale_y);
-                actor.opacity = clone.opacity;
-
-                clone.opacity = clone.__oldOpacity || 255;
-                clone.set_scale(1, 1);
-                clone.set_pivot_point(0, 0);
-
-                const halftime = 0.5 * Settings.prefs.animation_time;
-                params.time = halftime;
-                params.onComplete = () => {
-                    Easer.addEase(actor, {
-                        time: halftime,
-                        onComplete: () => {
-                            Scratch.unmakeScratch(metaWindow);
-                        },
-                    });
-                };
-                Easer.addEase(actor, params);
+                Navigator.getNavigator().accept();
             }
 
-            Navigator.getNavigator().accept();
-        }
-        else if (
-            clone &&
-            this.initialSpace.indexOf(metaWindow) !== -1) {
-            let space = this.initialSpace;
-            space.targetX = space.cloneContainer.x;
+            // NOTE: we reset window here so `window-added` will handle the window,
+            // and layout will work correctly etc.
+            this.window = null;
 
-            actor.set_scale(1, 1);
-            actor.set_pivot_point(0, 0);
+            this.initialSpace.layout();
+            // ensure window is properly activated after layout/ensureViewport tweens
+            Utils.later_add(Meta.LaterType.IDLE, () => {
+                metaWindow?.get_workspace() && Main.activateWindow(metaWindow);
+            });
 
-            Tiling.animateWindow(metaWindow);
-            params.onStopped = () => {
-                space.moveDone();
-                clone.set_pivot_point(0, 0);
-            };
-            Easer.addEase(clone, params);
+            // // Make sure the window is on the correct workspace.
+            // // If the window is transient this will take care of its parent too.
 
-            Tiling.ensureViewport(metaWindow, space);
-            Navigator.getNavigator().accept();
-        }
-
-        // NOTE: we reset window here so `window-added` will handle the window,
-        // and layout will work correctly etc.
-        this.window = null;
-
-        this.initialSpace.layout();
-        // ensure window is properly activated after layout/ensureViewport tweens
-        Utils.later_add(Meta.LaterType.IDLE, () => {
-            metaWindow?.get_workspace() && Main.activateWindow(metaWindow);
-        });
-
-        // // Make sure the window is on the correct workspace.
-        // // If the window is transient this will take care of its parent too.
-        Tiling.setInGrab(false);
-        if (this.dispatcher) {
-            Navigator.dismissDispatcher(DispatcherMode.POINTER);
-        }
-
-        setCursorGrabbing(false);
-
-        /**
-         * Gnome 44 removed the ability to manually end_grab_op.
-         * Previously we would end the grab_op before doing
-         * PaperWM grabs.  In 44, we can't do this so the grab op
-         * may still be in progress, which is okay, but won't be ended
-         * until we "click out".  We do this here if needed.
-         */
-        Utils.later_add(Meta.LaterType.IDLE, () => {
-            if (!global.display.end_grab_op && this.wasTiled) {
-                let time = Clutter.get_current_event_time();
+            /**
+             * Gnome 44 removed the ability to manually end_grab_op.
+             * Previously we would end the grab_op before doing
+             * PaperWM grabs.  In 44, we can't do this so the grab op
+             * may still be in progress, which is okay, but won't be ended
+             * until we "click out".  We do this here if needed.
+             */
+            Utils.later_add(Meta.LaterType.IDLE, () => {
+                if (!global.display.end_grab_op && this.wasTiled) {
+                    let time = Clutter.get_current_event_time();
                 
-                // Fakes an 'Escape' keypress to break Mutter's Wayland grab (works for both Touch and Pointer)
-                getVirtualKeyboard().notify_keyval(time, Clutter.KEY_Escape, Clutter.KeyState.PRESSED);
-                getVirtualKeyboard().notify_keyval(time, Clutter.KEY_Escape, Clutter.KeyState.RELEASED);
+                    // Fakes an 'Escape' keypress to break Mutter's Wayland grab (works for both Touch and Pointer)
+                    getVirtualKeyboard().notify_keyval(time, Clutter.KEY_Escape, Clutter.KeyState.PRESSED);
+                    getVirtualKeyboard().notify_keyval(time, Clutter.KEY_Escape, Clutter.KeyState.RELEASED);
+                }
+            });
+        } finally {
+            Tiling.setInGrab(false);
+            try {
+                if (this.dispatcher) {
+                    Navigator.dismissDispatcher(DispatcherMode.POINTER);
+                    this.dispatcher = null;
+                }
+            } finally {
+                setCursorGrabbing(false);
             }
-        });
+        }
     }
 
     activateDndTarget(zone, first) {

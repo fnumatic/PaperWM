@@ -95,7 +95,13 @@ export function planRow({
     return { y, width, height, warnings };
 }
 
-/** Reconcile a resize request with feedback, without retrying an unchanged refusal. */
+/**
+ * Reconcile a resize request with feedback, without retrying an unchanged refusal.
+ *
+ * `heightChanged` and `widthChanged` report a synchronous client adjustment, not
+ * a pending or refused request. The caller can carry an accepted height into
+ * the retry; otherwise it would reserve the original request again.
+ */
 export function reconcileRow({ before, requested, observed }) {
     const widthChanged = observed.width !== requested.width && observed.width !== before.width;
     const heightChanged = observed.height !== requested.height && observed.height !== before.height;
@@ -103,6 +109,8 @@ export function reconcileRow({ before, requested, observed }) {
         width: Math.max(requested.width, observed.width),
         // Reserve the request while pending; a synchronous adjustment becomes the new height.
         height: heightChanged ? observed.height : Math.max(requested.height, observed.height),
+        widthChanged,
+        heightChanged,
         needsRelayout: widthChanged || heightChanged,
     };
 }

@@ -457,6 +457,7 @@ export function findTargetWindow(space, direction, targetX = space.targetX) {
         ? { index: selectedIndex, x: clone.x, width: clone.width }
         : null;
 
+    const lastColumn = space[space.length - 1];
     const index = selectTargetWindow({
         windows: windows.map(window => ({
             x: window.clone.targetX,
@@ -466,6 +467,10 @@ export function findTargetWindow(space, direction, targetX = space.targetX) {
         targetX,
         workArea: space.workArea(),
         direction: direction === 1 || direction === true,
+        // Keep the legacy right-fallback at the first row of the last column.
+        fallbackLast: lastColumn?.length
+            ? windows.length - lastColumn.length
+            : undefined,
     });
     return index === null ? undefined : windows[index];
 }

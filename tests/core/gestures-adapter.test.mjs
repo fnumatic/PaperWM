@@ -322,6 +322,21 @@ test('done with columns but no windows ends without dereferencing a missing sele
     assert.equal(events.some(([name]) => name === 'addEase'), false);
 });
 
+test('the facade keeps the first row of the last column for the fallback', () => {
+    const top = makeWindow(-500, 100);
+    const bottom = makeWindow(-500, 100);
+    const space = makeSpace({
+        windows: [top, bottom],
+        width: 1000,
+        workArea: { x: 0, width: 1000 },
+    });
+    space.length = 0;
+    space.push([top, bottom]);
+    space.getWindow = (index, row) => space[index]?.[row];
+    const { api } = createAdapter();
+    assert.equal(api.findTargetWindow(space, 1), top);
+});
+
 test('the facade accepts a projected target without assigning the space target', () => {
     const window0 = makeWindow(100, 200);
     const space = makeSpace({

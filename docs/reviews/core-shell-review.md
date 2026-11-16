@@ -112,6 +112,18 @@ pre-GNOME-49 `end_grab_op` call is removed from setup.
 - The unused minimap offset export and the child clone's duplicate window pointer;
   the container keeps the only window reference needed by its adapter.
 
+## Follow-up fixes from this review
+
+- `reconcileRow` exposes `widthChanged` and `heightChanged`. `Space` carries an
+  accepted synchronous height in a per-layout map through the column retry;
+  otherwise the retry would reserve the original request again.
+- `MoveGrab.end` wraps teardown in `try/finally`. `Tiling.setInGrab(false)`, the
+  pointer dispatcher dismissal and the cursor reset still run when a native
+  effect or layout throws.
+- `selectTargetWindow` accepts explicit fallback indices. `findTargetWindow`
+  maps the right fallback to the first row of the last column, preserving the
+  legacy stacked-column row.
+
 ## Remaining boundary
 
 `Space` still owns the arrangement. Minimap keeps its rendered geometry plan
@@ -134,7 +146,7 @@ needs an explicit state/effect contract, not another parallel desktop model.
 
 Measured in this round:
 
-- `node --test tests/core/`: 219 passing tests on Node 26.12.1.
+- `node --test tests/core/`: 224 passing tests after the follow-up fixes.
 - `gjs -m tests/gjs-core.js`: passes on GJS 1.90.0, from source and from the
   extracted release ZIP. The ZIP contains all nine core modules and no tests.
 - JavaScript syntax and `git diff --check` pass.

@@ -72,10 +72,13 @@ export function projectGlide({ targetX, velocity, friction }) {
  * `windows[n].x` is the clone's target x; `selected.x` is the selected clone's
  * live x, matching the shell's two coordinate sources. `direction` is a
  * boolean: true scans right, false scans left. The facade owns the signed
- * -1/1 contract.
+ * -1/1 contract. `fallbackFirst` and `fallbackLast` are indices into the
+ * flattened list; the facade supplies the first rows of the first and last
+ * columns, so a flick with no reachable window keeps the legacy row.
  */
 export function selectTargetWindow({
     windows, selected, targetX, workArea, direction,
+    fallbackFirst = 0, fallbackLast = windows.length - 1,
 }) {
     if (windows.length === 0)
         return null;
@@ -108,8 +111,15 @@ export function selectTargetWindow({
     });
     if (visible.length > 0)
         return visible[0].index;
-    if (candidates.length === 0)
-        return right ? windows.length - 1 : 0;
+    if (candidates.length === 0) {
+        const valid = (value, fallback) =>
+            Number.isInteger(value) && value >= 0 && value < windows.length
+                ? value
+                : fallback;
+        return right
+            ? valid(fallbackLast, windows.length - 1)
+            : valid(fallbackFirst, 0);
+    }
     if (candidates.length === 1)
         return candidates[0].index;
 

@@ -564,7 +564,7 @@ export class Space extends Array {
         };
     }
 
-    layoutGrabColumn(column, x, y0, availableHeight, time, grabWindow) {
+    layoutGrabColumn(column, x, y0, availableHeight, time, grabWindow, adjustedHeights = null) {
         let space = this;
         let needRelayout = false;
         let columnWidth = 0;
@@ -574,7 +574,8 @@ export class Space extends Array {
                 windows.map(mw => mw.get_frame_rect().height),
                 height
             );
-            const [width, relayout, y] = space.layoutColumnSimple(windows, x, y0, f.width, targetHeights, time);
+            const [width, relayout, y] = space.layoutColumnSimple(
+                windows, x, y0, f.width, targetHeights, time, adjustedHeights);
             columnWidth = Math.max(columnWidth, width);
             needRelayout ||= relayout;
             return y;
@@ -605,7 +606,7 @@ export class Space extends Array {
         return [columnWidth, needRelayout];
     }
 
-    layoutColumnSimple(windows, x, y0, columnTargetWidth, targetHeights, time) {
+    layoutColumnSimple(windows, x, y0, columnTargetWidth, targetHeights, time, adjustedHeights = null) {
         let space = this;
         let y = y0;
 
@@ -615,7 +616,8 @@ export class Space extends Array {
 
         for (let i = 0; i < windows.length; i++) {
             let mw = windows[i];
-            let targetHeight = targetHeights[i];
+            // A synchronous client adjustment is authoritative for the retry.
+            const targetHeight = adjustedHeights?.get(mw) ?? targetHeights[i];
 
             let f = mw.get_frame_rect();
 
@@ -644,7 +646,6 @@ export class Space extends Array {
                 continue;
             }
             const targetWidth = planned.width;
-            targetHeight = planned.height;
             y = planned.y;
 
             if (resizable) {
@@ -670,6 +671,10 @@ export class Space extends Array {
                 requested: planned,
                 observed: { width: observed.width, height: observed.height },
             });
+            // Keep an accepted height for a retry of this column; otherwise the
+            // next pass would reserve the original request again.
+            if (feedback.heightChanged)
+                adjustedHeights?.set(mw, feedback.height);
             needsRelayout ||= feedback.needsRelayout;
 
             let c = mw.clone;
@@ -735,6 +740,8 @@ export class Space extends Array {
         let availableHeight = workArea.height;
         let y0 = workArea.y;
         let fixPointAttempCount = 0;
+        // Accepted synchronous resize adjustments survive the retry loop.
+        const adjustedHeights = new Map();
 
         this._inLayout = true;
         try {
@@ -754,7 +761,8 @@ export class Space extends Array {
                 const allocator = allocators?.[i];
                 if (inGrab?.dnd && column.includes(inGrab.window) && !allocator) {
                     [resultingWidth, relayout] =
-                        this.layoutGrabColumn(column, x, y0, availableHeight, time, inGrab.window);
+                        this.layoutGrabColumn(column, x, y0, availableHeight, time,
+                            inGrab.window, adjustedHeights);
                 } else {
                     const widthOf = w =>
                         w._fullscreen_frame?.tiledWidth ?? w.get_frame_rect().width;
@@ -767,7 +775,8 @@ export class Space extends Array {
                     });
                     const targetHeights = (allocator ?? allocateDefault)(column, availableHeight, selectedInColumn);
                     [resultingWidth, relayout] =
-                        this.layoutColumnSimple(column, x, y0, targetWidth, targetHeights, time);
+                        this.layoutColumnSimple(column, x, y0, targetWidth, targetHeights, time,
+                            adjustedHeights);
                 }
 
                 if (relayout) {

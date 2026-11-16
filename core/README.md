@@ -36,10 +36,12 @@ Rules:
   previews with their own layout, then restores them in GNOME slot tuples.
 - Gesture decisions accept an explicit projected scroll offset. Selection never
   needs a temporary write to the live viewport. Sample history holds three events.
+  The fallback uses the caller's first-row indices when a column is stacked.
 - Minimap layout derives clip offsets and actor size from geometry and the gap.
   Selection uses the rendered plan plus the current scroll and measured label.
 - Requested geometry is not observed geometry. Resize feedback belongs to the
   adapter to measure; `reconcileRow` decides how it affects the next row/retry.
+  An accepted synchronous height is carried into the column retry.
 - Legacy quirks are preserved deliberately and marked where they are not
   obvious. Changing one needs its own test and decision.
 

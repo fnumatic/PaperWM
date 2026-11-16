@@ -90,14 +90,14 @@ test('resize feedback distinguishes completion, pending work and synchronous con
     const before = Object.freeze({ width: 800, height: 600 });
     const requested = Object.freeze({ width: 500, height: 400 });
     assert.deepEqual(reconcileRow({ before, requested, observed: requested }), {
-        width: 500, height: 400, needsRelayout: false,
+        width: 500, height: 400, widthChanged: false, heightChanged: false, needsRelayout: false,
     });
     assert.deepEqual(reconcileRow({ before, requested, observed: before }), {
-        width: 800, height: 600, needsRelayout: false,
+        width: 800, height: 600, widthChanged: false, heightChanged: false, needsRelayout: false,
     });
     const observed = Object.freeze({ width: 550, height: 450 });
     assert.deepEqual(reconcileRow({ before, requested, observed }), {
-        width: 550, height: 450, needsRelayout: true,
+        width: 550, height: 450, widthChanged: true, heightChanged: true, needsRelayout: true,
     });
 });
 
@@ -105,9 +105,9 @@ test('a pending growth reserves the requested size but accepted feedback takes p
     const before = { width: 500, height: 400 };
     const requested = { width: 800, height: 600 };
     assert.deepEqual(reconcileRow({ before, requested, observed: before }), {
-        width: 800, height: 600, needsRelayout: false,
+        width: 800, height: 600, widthChanged: false, heightChanged: false, needsRelayout: false,
     });
     assert.deepEqual(reconcileRow({ before, requested, observed: { width: 750, height: 550 } }), {
-        width: 800, height: 550, needsRelayout: true,
+        width: 800, height: 550, widthChanged: true, heightChanged: true, needsRelayout: true,
     });
 });

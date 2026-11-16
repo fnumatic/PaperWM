@@ -87,6 +87,35 @@ test('a rejected shrink leaves enough room for the observed window size', () => 
     assert.equal(windows[1].clone.targetY, 208);
 });
 
+test('an accepted synchronous height survives the column retry', () => {
+    const layout = method('../../tiling.js', 'layoutColumnSimple', {
+        planRow, reconcileRow, isMaximized: () => false,
+        Settings: { prefs: { window_gap: 8, vertical_margin: 4, horizontal_margin: 10 } },
+    });
+    const shrink = (width, height) => {
+        let frame = { x: 0, y: 0, width, height };
+        return {
+            clone: { x: 0, y: 0, targetX: 0, targetY: 0 },
+            get_frame_rect: () => frame,
+            move_resize_frame: (_, x, y, targetWidth, targetHeight) => {
+                frame = { x, y, width: targetWidth, height: Math.min(targetHeight, 550) };
+            },
+        };
+    };
+    const first = shrink(800, 400);
+    const second = shrink(800, 100);
+    const adjusted = new Map();
+    const space = { workArea: () => ({ width: 1920 }) };
+
+    const firstPass = layout.call(space, [first, second], 20, 0, 800, [600, 100], 0, adjusted);
+    assert.equal(adjusted.get(first), 550);
+    assert.equal(firstPass[1], true);
+
+    const secondPass = layout.call(space, [first, second], 20, 0, 800, [600, 100], 0, adjusted);
+    assert.equal(secondPass[1], false);
+    assert.equal(second.clone.targetY, 558);
+});
+
 test('grab column advance includes rows wider than the anchor', () => {
     const anchor = { get_frame_rect: () => ({ y: 100, width: 400, height: 300 }) };
     const column = [{ get_frame_rect: () => ({ height: 50 }) }, anchor];
@@ -178,6 +207,12 @@ test('grabEnd does not end the custom pointer grab on a Mutter completion signal
     });
     grabEnd();
     assert.equal(ended, 0);
+
+    const normal = runInNewContext(`(${source.replace('export ', '')})`, {
+        inGrab: { end: () => { ended++; } }, Grab: { grabbed: false },
+    });
+    normal();
+    assert.equal(ended, 1);
 });
 
 test('ensuredX accepts a projected offset without writing shell state', () => {
@@ -221,6 +256,39 @@ test('MoveGrab.end releases owned resources only once', () => {
     assert.doesNotThrow(() => end.call(grab));
     assert.equal(destroyed, 1);
     assert.equal(layouts, 1);
+});
+
+test('MoveGrab.end releases the dispatcher and cursor when teardown throws', () => {
+    let dismissed = 0;
+    const cursors = [];
+    const inGrab = [];
+    const end = method('../../grab.js', 'end', {
+        grabbed: true, dragDriftTimeout: null,
+        Utils: { timeout_remove() {}, later_add() {} },
+        Settings: { prefs: { animation_time: 0 } },
+        Tiling: { setInGrab: value => inGrab.push(value) },
+        Navigator: { dismissDispatcher: () => { dismissed++; } },
+        DispatcherMode: { POINTER: 1 },
+        global: { get_pointer: () => [0, 0] },
+        setCursorGrabbing: value => cursors.push(value),
+        Meta: { LaterType: { IDLE: 0 } },
+    });
+    const grab = {
+        signals: { destroy() {} },
+        window: { get_compositor_private: () => null, clone: {} },
+        zoneActors: new Set(),
+        initialSpace: {
+            indexOf: () => 0,
+            cloneContainer: { x: 0 },
+            layout: () => {},
+        },
+        dispatcher: {},
+    };
+    assert.throws(() => end.call(grab));
+    assert.deepEqual(inGrab, [false]);
+    assert.equal(dismissed, 1);
+    assert.equal(grab.dispatcher, null);
+    assert.deepEqual(cursors, [false]);
 });
 
 test('failed grab setup does not mark the pointer dispatcher as acquired', () => {

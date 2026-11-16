@@ -172,6 +172,41 @@ test('target selection falls back to the first or last window when none is reach
     assert.equal(selectTargetWindow({ ...base, direction: false }), 0);
 });
 
+test('the fallback keeps the first row of the last column', () => {
+    const windows = freezeDeep([
+        { x: -500, width: 100 },
+        { x: -500, width: 100 },
+        { x: 2000, width: 100 },
+        { x: 2000, width: 100 },
+    ]);
+    const base = {
+        windows,
+        selected: null,
+        targetX: 0,
+        workArea: freezeDeep({ x: 0, width: 1000 }),
+        fallbackLast: 2,
+    };
+    assert.equal(selectTargetWindow({ ...base, direction: true }), 2);
+    assert.equal(selectTargetWindow({ ...base, direction: false }), 0);
+});
+
+test('fallback keeps the first row of the last column for stacked layouts', () => {
+    const windows = freezeDeep([
+        { x: -300, width: 100 },
+        { x: -300, width: 100 },
+        { x: -300, width: 100 },
+        { x: -300, width: 100 },
+    ]);
+    const base = {
+        windows,
+        selected: null,
+        targetX: 0,
+        workArea: freezeDeep({ x: 0, width: 1000 }),
+    };
+    assert.equal(selectTargetWindow({ ...base, direction: true, fallbackLast: 2 }), 2);
+    assert.equal(selectTargetWindow({ ...base, direction: false }), 0);
+});
+
 test('target selection uses the work-area origin, not the monitor edge', () => {
     const windows = freezeDeep([
         { x: 50, width: 200 },

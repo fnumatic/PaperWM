@@ -57,7 +57,7 @@ equal(reconcileRow({
     before: { width: 800, height: 600 },
     requested: { width: 400, height: 300 },
     observed: { width: 500, height: 400 },
-}), { width: 500, height: 400, needsRelayout: true });
+}), { width: 500, height: 400, widthChanged: true, heightChanged: true, needsRelayout: true });
 equal(projectGlide({ targetX: -100, velocity: 2, friction: 0.32 }),
     { targetX: -200, duration: 100, distance: 100 });
 equal(snapGlideTarget({
