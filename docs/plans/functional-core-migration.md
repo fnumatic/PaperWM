@@ -11,7 +11,7 @@ implemented. M2 is complete for arithmetic: work-area adjustment, column target
 widths, per-row planning, the auto-pan decision, the `ensuredX` viewport policy
 and the visibility/placeability predicates live in `core/geometry.js`. M3
 started: linear and directional navigation arithmetic lives in
-`core/navigation.js`; open-window and swap targets live in
+`core/navigation.js`; open-window, swap, slurp and barf targets live in
 `core/arrangement.js`; window-rule matching lives in `core/winprops.js`.
 Synchronous resize feedback, stacking order, actor work and the
 `ensureViewport` animation path stay in `tiling.js`.

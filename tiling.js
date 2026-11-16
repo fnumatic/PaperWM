@@ -37,6 +37,8 @@ import {
 import {
     openWindowIndex,
     swapTarget,
+    slurpPlan,
+    barfTarget,
 } from './core/arrangement.js';
 
 const { signals: Signals } = imports;
@@ -5260,55 +5262,39 @@ export function slurp(metaWindow, insertAt = SlurpInsertPosition.BOTTOM) {
     }
 
     const index = space.indexOf(metaWindow);
-    let to, from, metaWindowToSlurp;
-
-    if (space.length < 2) {
+    const planned = slurpPlan({
+        index,
+        columnLengths: space.map(column => column.length),
+        direction: {
+            [Settings.OpenWindowPositions.LEFT]: 'left',
+            [Settings.OpenWindowPositions.START]: 'start',
+            [Settings.OpenWindowPositions.RIGHT]: 'right',
+            [Settings.OpenWindowPositions.END]: 'end',
+        }[Settings.prefs.open_window_position] ?? 'right',
+        insertAt: {
+            [SlurpInsertPosition.ABOVE]: 'above',
+            [SlurpInsertPosition.BELOW]: 'below',
+            [SlurpInsertPosition.TOP]: 'top',
+            [SlurpInsertPosition.BOTTOM]: 'bottom',
+        }[insertAt],
+        rowIndex: space[index].indexOf(metaWindow),
+    });
+    if (!planned)
         return;
-    }
 
-    // get current direction mode
-    const direction = Settings.prefs.open_window_position;
-    switch (direction) {
-    case Settings.OpenWindowPositions.LEFT:
-    case Settings.OpenWindowPositions.START:
-        to = index;
-        from = index - 1;
-        break;
-    case Settings.OpenWindowPositions.RIGHT:
-    case Settings.OpenWindowPositions.END:
-    default:
-        to = index;
-        from = index + 1;
-        break;
-    }
-
-    metaWindowToSlurp = space[from]?.[0];
-    if (!metaWindowToSlurp) {
-        return;
-    }
+    const from = planned.from;
+    const metaWindowToSlurp = space[from][0];
 
     // slurping fullscreen windows is trouble, unfullscreen when slurping
     if (metaWindowToSlurp?.fullscreen) {
         metaWindowToSlurp.unmake_fullscreen();
     }
 
-    const spaceTo = space[to];
-    const rowIndex = spaceTo.indexOf(metaWindow);
-    switch (insertAt) {
-    case SlurpInsertPosition.ABOVE:
-        spaceTo.splice(rowIndex, 0, metaWindowToSlurp);
-        break;
-    case SlurpInsertPosition.BELOW:
-        spaceTo.splice(rowIndex + 1, 0, metaWindowToSlurp);
-        break;
-    case SlurpInsertPosition.TOP:
-        spaceTo.unshift(metaWindowToSlurp);
-        break;
-    case SlurpInsertPosition.BOTTOM:
-    default:
+    const spaceTo = space[index];
+    if (planned.position.push)
         spaceTo.push(metaWindowToSlurp);
-        break;
-    }
+    else
+        spaceTo.splice(planned.position.index, 0, metaWindowToSlurp);
 
     { // Remove the slurped window
         const column = space[from];
@@ -5319,15 +5305,12 @@ export function slurp(metaWindow, insertAt = SlurpInsertPosition.BOTTOM) {
         if (column.length === 0) {
             space.splice(from, 1);
         }
-
-        // with column removed, `to` column may have changed
-        to = space.indexOf(metaWindow);
     }
 
     // after columns have slurped, "to" index may have changed
     space.layout(true, {
         customAllocators: {
-            [to]: allocateEqualHeight,
+            [space.indexOf(metaWindow)]: allocateEqualHeight,
         },
         ensure: false,
     });
@@ -5348,22 +5331,18 @@ export function barf(metaWindow, expelWindow) {
         return;
 
     const column = space[index];
-    if (column.length < 2)
+    const planned = barfTarget({
+        index,
+        columnLength: column.length,
+        direction: {
+            [Settings.OpenWindowPositions.LEFT]: 'left',
+            [Settings.OpenWindowPositions.START]: 'start',
+            [Settings.OpenWindowPositions.RIGHT]: 'right',
+            [Settings.OpenWindowPositions.END]: 'end',
+        }[Settings.prefs.open_window_position] ?? 'right',
+    });
+    if (!planned)
         return;
-
-    let to;
-    const direction = Settings.prefs.open_window_position;
-    switch (direction) {
-    case Settings.OpenWindowPositions.LEFT:
-    case Settings.OpenWindowPositions.START:
-        to = index; // if left then current index will increment
-        break;
-    case Settings.OpenWindowPositions.RIGHT:
-    case Settings.OpenWindowPositions.END:
-    default:
-        to = index + 1;
-        break;
-    }
 
     // // remove metawindow from column
     if (expelWindow) {
@@ -5375,7 +5354,7 @@ export function barf(metaWindow, expelWindow) {
         // remove from bottom
         expelWindow = column.splice(-1, 1)[0];
     }
-    space.splice(to, 0, [expelWindow]);
+    space.splice(planned.to, 0, [expelWindow]);
 
     space.layout(true, {
         customAllocators: { [space.indexOf(metaWindow)]: allocateEqualHeight, ensure: false },

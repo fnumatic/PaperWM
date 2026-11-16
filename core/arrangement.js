@@ -25,6 +25,51 @@ export function openWindowIndex({ selectedIndex, columnCount, position }) {
 }
 
 /**
+ * Plan for stacking a neighbouring column into the current one.
+ *
+ * `from` is the neighbour column; `position` is where the window enters the
+ * current column. `push` appends, matching the legacy default branch.
+ */
+export function slurpPlan({ index, columnLengths, direction, insertAt, rowIndex }) {
+    if (columnLengths.length < 2)
+        return null;
+
+    const from = direction === 'left' || direction === 'start'
+        ? index - 1
+        : index + 1;
+
+    if (from < 0 || from >= columnLengths.length)
+        return null;
+    if ((columnLengths[from] ?? 0) === 0)
+        return null;
+
+    switch (insertAt) {
+    case 'above':
+        return { from, position: { index: rowIndex } };
+    case 'below':
+        return { from, position: { index: rowIndex + 1 } };
+    case 'top':
+        return { from, position: { index: 0 } };
+    default:
+        return { from, position: { push: true } };
+    }
+}
+
+/**
+ * Column index for a window expelled from a column, or null when the column
+ * holds only that window. `left`/`start` keep the current index, matching the
+ * legacy splice order.
+ */
+export function barfTarget({ index, columnLength, direction }) {
+    if (columnLength < 2)
+        return null;
+
+    return {
+        to: direction === 'left' || direction === 'start' ? index : index + 1,
+    };
+}
+
+/**
  * Target slot for a swap, or null when it leaves the space.
  *
  * `columnLength` is the source column's row count, as the legacy check used.
