@@ -6,8 +6,8 @@ Status: implementation underway after user approval. The original milestone
 descriptions below remain the migration roadmap, not a statement that their
 gates all passed.
 
-Progress: six stateless modules now isolate allocation, geometry, navigation,
-arrangement, window rules, and DnD decisions. A second review removes redundant
+Progress: seven stateless modules now isolate allocation, geometry, navigation,
+arrangement, window rules, DnD and overview-layout decisions. A second review removes redundant
 inputs and corrects regressions; see [the review](../reviews/core-review.md).
 The pure tests include dimension/slot invariants and direct adapter contract
 tests, plus a GJS import smoke. Temporary random parity scripts are not an

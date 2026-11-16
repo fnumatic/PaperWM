@@ -5,6 +5,7 @@ import { nextLinear, stepIndex } from '../core/navigation.js';
 import { openWindowIndex } from '../core/arrangement.js';
 import { winpropMatches } from '../core/winprops.js';
 import { sameDndTarget, selectDndTarget } from '../core/dnd.js';
+import { computeOverviewLayout, computeOverviewScale, computeOverviewSlots } from '../core/overview.js';
 
 function equal(actual, expected) {
     if (JSON.stringify(actual) !== JSON.stringify(expected))
@@ -33,4 +34,17 @@ equal(selectDndTarget({
     ],
     x: 750, y: 300, gap: 20, viewportWidth: 1920, scrollOffsetX: 0,
 }).position, [1]);
+const overview = computeOverviewLayout({
+    windows: [{ boundingBox: { width: 800, height: 600 } }],
+    numRows: 1, monitorHeight: 1080, minWindowsPerRow: 2,
+});
+const { scale } = computeOverviewScale({
+    layout: overview, area: { x: 0, y: 0, width: 1920, height: 1080 },
+    maxScale: 0.9, columnSpacing: 10, rowSpacing: 20,
+});
+const { slots } = computeOverviewSlots({
+    layout: overview, area: { x: 0, y: 0, width: 1920, height: 1080 },
+    scale, maxScale: 0.9, columnSpacing: 10, rowSpacing: 20, monitorHeight: 1080,
+});
+equal(slots.length, 1);
 print('Core imports and smoke assertions pass in GJS.');

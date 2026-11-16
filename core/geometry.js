@@ -157,6 +157,23 @@ export function ensuredX({
 }
 
 /**
+ * Height split around the grabbed window during a drag.
+ *
+ * `above` and `below` can be negative when the drag leaves little room; the
+ * allocator clamps them, matching the other layout paths.
+ */
+export function grabColumnHeights({
+    yGrabRel, grabHeight, y0, gap, availableHeight, columnLength, index,
+}) {
+    return {
+        above: (yGrabRel - y0) - gap - (index - 1) * gap,
+        anchor: grabHeight,
+        below: availableHeight - (yGrabRel + grabHeight - y0) - gap -
+            (columnLength - index - 2) * gap,
+    };
+}
+
+/**
  * Whether the window's current clone position overlaps the work area.
  *
  * `x` is the clone position in the same space as `workArea` (live position,

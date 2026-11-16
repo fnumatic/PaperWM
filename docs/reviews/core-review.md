@@ -98,6 +98,24 @@ The preference parser also constructed boxed `Number` values. Pixel widths
 then failed the adapter's `Number.isFinite` guard. Values now normalize to
 primitive numbers, and tests include that boundary case.
 
+### Overview: the last large block of pure arithmetic
+
+`overviewlayout.js` carried about 240 lines of grid arithmetic inside a GNOME
+`LayoutStrategy`. The strategy now only sorts windows, reads settings/monitor
+metrics and delegates. `core/overview.js` computes layout rows, scale and slots
+from plain boxes.
+
+Verified against the previous implementation on 5,000 generated layouts: scale,
+area ratio and every slot matched. The core returns new rows instead of
+annotating the caller's layout; the adapter assigns them back because the shell
+strategy contract exposes `layout.rows`.
+
+### Drag column heights
+
+The above/anchor/below split during a drag no longer lives in `tiling.js`.
+`grabColumnHeights` returns the three values; negative remainders are clamped by
+the allocator, not silently passed to a resize.
+
 ### Viewport: one decision instead of a duplicated automatic-mode input
 
 Automatic-mode detection and target calculation are one `autoPanTargetX`

@@ -27,6 +27,7 @@ import {
     isVisible as isVisibleCore,
     isFullyVisible as isFullyVisibleCore,
     isPlaceable as isPlaceableCore,
+    grabColumnHeights,
 } from './core/geometry.js';
 import {
     nextLinear as nextLinearCore,
@@ -583,14 +584,21 @@ export class Space extends Array {
 
         const gap = Settings.prefs.window_gap;
         const f = grabWindow.get_frame_rect();
-        let yGrabRel = f.y - this.monitor.y;
+        const yGrabRel = f.y - this.monitor.y;
         targetWidth = f.width;
 
-        const H1 = (yGrabRel - y0) - gap - (k - 1) * gap;
-        const H2 = availableHeight - (yGrabRel + f.height - y0) - gap - (column.length - k - 2) * gap;
-        k > 0 && mosh(column.slice(0, k), H1, y0);
-        let y = mosh(column.slice(k, k + 1), f.height, yGrabRel);
-        k + 1 < column.length && mosh(column.slice(k + 1), H2, y);
+        const heights = grabColumnHeights({
+            yGrabRel,
+            grabHeight: f.height,
+            y0,
+            gap,
+            availableHeight,
+            columnLength: column.length,
+            index: k,
+        });
+        k > 0 && mosh(column.slice(0, k), heights.above, y0);
+        let y = mosh(column.slice(k, k + 1), heights.anchor, yGrabRel);
+        k + 1 < column.length && mosh(column.slice(k + 1), heights.below, y);
 
         return [targetWidth, needRelayout];
     }

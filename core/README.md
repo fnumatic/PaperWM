@@ -12,6 +12,7 @@ are plain data. Callers own windows, actors, signals and persistence.
 | `arrangement.js` | Open-window, swap, slurp and barf placement |
 | `winprops.js` | Window-rule matching |
 | `dnd.js` | Drag-and-drop hit testing |
+| `overview.js` | Overview grid layout, scale and slots |
 
 Rules:
 
