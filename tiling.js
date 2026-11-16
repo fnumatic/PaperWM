@@ -25,6 +25,9 @@ import {
     ensuredX as ensuredXCore,
     isAutoCentered,
     autoPanTargetX,
+    isVisible as isVisibleCore,
+    isFullyVisible as isFullyVisibleCore,
+    isPlaceable as isPlaceableCore,
 } from './core/geometry.js';
 import {
     nextLinear as nextLinearCore,
@@ -821,52 +824,41 @@ export class Space extends Array {
     // Space.prototype.isVisible = function
     isVisible(metaWindow, margin = 0) {
         let clone = metaWindow.clone;
-        let x = clone.x + this.cloneContainer.x;
-        let workArea = this.workArea();
-        let min = workArea.x;
-
-        if (x - margin + clone.width < min ||
-            x + margin > min + workArea.width) {
-            return false;
-        } else {
-            return true;
-        }
+        return isVisibleCore({
+            x: clone.x + this.cloneContainer.x,
+            width: clone.width,
+            workArea: this.workArea(),
+            margin,
+        });
     }
 
     isFullyVisible(metaWindow) {
         let clone = metaWindow.clone;
-        let x = this.visibleX(metaWindow);
-        let workArea = this.workArea();
-        let min = workArea.x;
-
-        return min <= x && x + clone.width < min + workArea.width;
+        return isFullyVisibleCore({
+            x: this.visibleX(metaWindow),
+            width: clone.width,
+            workArea: this.workArea(),
+        });
     }
 
+    /** Legacy name: returns a boolean, not a ratio. Kept as an alias. */
     visibleRatio(metaWindow) {
-        let clone = metaWindow.clone;
-        let x = this.visibleX(metaWindow);
-        let workArea = this.workArea();
-        let min = workArea.x;
-        return min <= x && x + clone.width < min + workArea.width;
+        return this.isFullyVisible(metaWindow);
     }
 
     isPlaceable(metaWindow) {
         let clone = metaWindow.clone;
-        let x = this.visibleX(metaWindow);
         let workArea = Main.layoutManager.getWorkAreaForMonitor(this.monitor.index);
-        let min = workArea.x - this.monitor.x;
 
-        if (x + clone.width < min + stack_margin ||
-            x > min + workArea.width - stack_margin) {
-            return false;
-        } else {
-            // Fullscreen windows are only placeable on the monitor origin
-            if ((isMaximized(metaWindow) && x !== min) ||
-                (metaWindow.fullscreen && x !== 0)) {
-                return false;
-            }
-            return true;
-        }
+        return isPlaceableCore({
+            x: this.visibleX(metaWindow),
+            width: clone.width,
+            workArea,
+            monitorX: this.monitor.x,
+            stackMargin: stack_margin,
+            maximized: isMaximized(metaWindow),
+            fullscreen: Boolean(metaWindow.fullscreen),
+        });
     }
 
     getWindows() {

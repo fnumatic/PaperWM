@@ -166,6 +166,43 @@ export function ensuredX({
 }
 
 /**
+ * Whether the window's current clone position overlaps the work area.
+ *
+ * `x` is the clone position in the same space as `workArea` (live position,
+ * not the target).
+ */
+export function isVisible({ x, width, workArea, margin = 0 }) {
+    const min = workArea.x;
+    return !(x - margin + width < min || x + margin > min + workArea.width);
+}
+
+/**
+ * Whether the window, at its target position, lies fully inside the work area.
+ */
+export function isFullyVisible({ x, width, workArea }) {
+    const min = workArea.x;
+    return min <= x && x + width < min + workArea.width;
+}
+
+/**
+ * Whether a window can be placed at its current target position.
+ *
+ * `x` is monitor-local; `stackMargin` keeps a strip free at both edges.
+ */
+export function isPlaceable({ x, width, workArea, monitorX, stackMargin, maximized, fullscreen }) {
+    const min = workArea.x - monitorX;
+
+    if (x + width < min + stackMargin || x > min + workArea.width - stackMargin)
+        return false;
+
+    // Fullscreen windows are only placeable on the monitor origin
+    if ((maximized && x !== min) || (fullscreen && x !== 0))
+        return false;
+
+    return true;
+}
+
+/**
  * Whether the content currently sits centered, or overflows the right edge
  * while starting at or before the left edge.
  */
