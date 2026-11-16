@@ -18,7 +18,8 @@ and the `ensureViewport` animation path stay in `tiling.js`.
 boundary; parity with the legacy implementation was checked on 20,000 generated
 columns, 20,000 rows, 20,000 geometry rounds, 30,000 viewport rounds, 30,000
 navigation rounds, 120,000 visibility checks and 60,000 arrangement checks
-before replacing it. State ownership and lifecycle changes remain open.
+before replacing it. The isolated M0 harness and the GNOME-run gates are still
+outstanding. State ownership and lifecycle changes remain open.
 
 Baseline: `custom-stable`, commit `2d460db` (`v51.0.0`).
 
