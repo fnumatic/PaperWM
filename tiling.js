@@ -22,6 +22,7 @@ import {
     layoutWorkArea,
     targetWidthForColumn,
     planRow,
+    ensuredX as ensuredXCore,
     isAutoCentered,
     autoPanTargetX,
 } from './core/geometry.js';
@@ -4400,55 +4401,34 @@ export function ensuredX(meta_window, space) {
     let index = space.indexOf(meta_window);
     let last = space.selectedWindow;
     let lastIndex = space.indexOf(last);
-    let neighbour = Math.abs(lastIndex - index) <= 1;
 
     let monitor = space.monitor;
     let frame = meta_window.get_frame_rect();
     let clone = meta_window.clone;
-
-    let x;
-    if (neighbour || space.isVisible(meta_window) || meta_window.lastFrame === undefined)
-        x = Math.round(clone.targetX) + space.targetX;
-    else
-        x = meta_window.lastFrame.x - monitor.x;
     let workArea = space.workArea();
-    let min = workArea.x;
-    let max = min + workArea.width;
 
-    if (space.focusMode === FocusModes.CENTER) {
-        // window switching should centre focus
-        x = workArea.x + Math.round(workArea.width / 2 - frame.width / 2);
-    } else if (meta_window.fullscreen) {
-        x = 0;
-    } else if (space.focusMode === FocusModes.EDGE) {
-        // Align to the closest edge, with special cases for
-        // only (center), first (left), and last (right) windows
-        if (index === 0 && space.length === 1)
-            x = min + Math.round((workArea.width - frame.width) / 2);
-        else if (index === 0 || (Math.abs(x - min) < Math.abs(x + frame.width - max) &&
-            index !== space.length - 1))
-            x = min + Settings.prefs.horizontal_margin;
-        else
-            x = max - Settings.prefs.horizontal_margin - frame.width;
-    } else if (frame.width > workArea.width * 0.9 - 2 * (Settings.prefs.horizontal_margin + Settings.prefs.window_gap)) {
-        // Consider the window to be wide and center it
-        x = min + Math.round((workArea.width - frame.width) / 2);
-    } else if (x + Settings.prefs.horizontal_margin + frame.width > max) {
-        // Align to the right prefs.horizontal_margin
-        x = max - Settings.prefs.horizontal_margin - frame.width;
-    } else if (x < min + Settings.prefs.horizontal_margin) {
-        // Align to the left prefs.horizontal_margin
-        x = min + Settings.prefs.horizontal_margin;
-    } else if (x + frame.width === max) {
-        // When opening new windows at the end, in the background, we want to
-        // show some minimup margin
-        x = max - Settings.prefs.minimum_margin - frame.width;
-    } else if (x === min) {
-        // Same for the start (though the case isn't as common)
-        x = min + Settings.prefs.minimum_margin;
-    }
+    const focusMode = space.focusMode === FocusModes.CENTER ? 'center'
+        : space.focusMode === FocusModes.EDGE ? 'edge'
+            : 'default';
 
-    return x;
+    return ensuredXCore({
+        index,
+        selectedIndex: lastIndex,
+        spaceLength: space.length,
+        focusMode,
+        fullscreen: Boolean(meta_window.fullscreen),
+        cloneTargetX: clone.targetX,
+        targetX: space.targetX,
+        lastFrameX: meta_window.lastFrame?.x,
+        hasLastFrame: meta_window.lastFrame !== undefined,
+        monitorX: monitor.x,
+        isVisible: space.isVisible(meta_window),
+        frame,
+        workArea,
+        horizontalMargin: Settings.prefs.horizontal_margin,
+        windowGap: Settings.prefs.window_gap,
+        minimumMargin: Settings.prefs.minimum_margin,
+    });
 }
 
 /**
