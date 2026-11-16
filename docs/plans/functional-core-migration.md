@@ -12,8 +12,9 @@ widths, per-row planning, the auto-pan decision, the `ensuredX` viewport policy
 and the visibility/placeability predicates live in `core/geometry.js`. M3
 started: linear and directional navigation arithmetic lives in
 `core/navigation.js`; open-window and swap targets live in
-`core/arrangement.js`. Synchronous resize feedback, stacking order, actor work
-and the `ensureViewport` animation path stay in `tiling.js`.
+`core/arrangement.js`; window-rule matching lives in `core/winprops.js`.
+Synchronous resize feedback, stacking order, actor work and the
+`ensureViewport` animation path stay in `tiling.js`.
 `node --test tests/core/` covers the extracted arithmetic and the import
 boundary; parity with the legacy implementation was checked on 20,000 generated
 columns, 20,000 rows, 20,000 geometry rounds, 30,000 viewport rounds, 30,000

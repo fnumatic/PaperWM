@@ -2,6 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import { AcceleratorParse } from './acceleratorparse.js';
+import { winpropMatches, selectWinprop } from './core/winprops.js';
 
 /**
     Settings utility shared between the running extension and the preference UI.
@@ -360,43 +361,18 @@ export function restoreConflicts() {
 */
 export let winprops = [];
 export function winprop_match_p(meta_window, prop) {
-    let wm_class = meta_window.wm_class || "";
-    let title = meta_window.title;
-    if (prop.wm_class) {
-        if (prop.wm_class instanceof RegExp) {
-            if (!wm_class.match(prop.wm_class))
-                return false;
-        } else if (prop.wm_class !== wm_class) {
-            return false;
-        }
-    }
-    if (prop.title) {
-        if (prop.title instanceof RegExp) {
-            if (!title.match(prop.title))
-                return false;
-        } else if (prop.title !== title)
-            return false;
-    }
-
-    return true;
+    return winpropMatches({
+        wmClass: meta_window.wm_class,
+        title: meta_window.title,
+    }, prop);
 }
 
 export function find_winprop(meta_window)  {
-    // sort by title first (prioritise title over wm_class)
-    let props = winprops.filter(winprop_match_p.bind(null, meta_window));
-
-    // if matching props found, return first one
-    if (props.length > 0) {
-        return props[0];
-    }
-
-    // fall back, if star (catch-all) winprop exists, return the first one
-    let starProps = winprops.filter(w => w.wm_class === "*" || w.title === "*");
-    if (starProps.length > 0) {
-        return starProps[0];
-    }
-
-    return null;
+    return selectWinprop({
+        wmClass: meta_window.wm_class,
+        title: meta_window.title,
+        props: winprops,
+    });
 }
 
 export function defwinprop(spec) {
