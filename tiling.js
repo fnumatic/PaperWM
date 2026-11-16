@@ -26,6 +26,11 @@ import {
     isAutoCentered,
     autoPanTargetX,
 } from './core/geometry.js';
+import {
+    nextLinear as nextLinearCore,
+    stepColumn,
+    stepRow,
+} from './core/navigation.js';
 
 const { signals: Signals } = imports;
 const workspaceManager = global.workspace_manager;
@@ -1082,30 +1087,21 @@ export class Space extends Array {
     }
 
     switchLinear(dir, loop) {
-        let index = this.selectedIndex();
-        let column = this[index];
-        if (!column)
+        const selectedIndex = this.selectedIndex();
+        if (!this[selectedIndex])
             return false;
-        let row = column.indexOf(this.selectedWindow);
-        if (Lib.in_bounds(column, row + dir) === false) {
-            index += dir;
-            if (loop) {
-                if (index >= this.length) {
-                    index = 0;
-                } else if (index < 0) {
-                    index = this.length - 1;
-                }
-            }
-            if (dir === 1) {
-                if (index < this.length)
-                    row = 0;
-            } else if (index >= 0)
-                row = this[index].length - 1;
-        } else {
-            row += dir;
-        }
 
-        let metaWindow = this.getWindow(index, row);
+        const planned = nextLinearCore({
+            columnLengths: this.map(column => column.length),
+            index: selectedIndex,
+            row: this[selectedIndex].indexOf(this.selectedWindow),
+            dir,
+            loop,
+        });
+        if (!planned)
+            return false;
+
+        let metaWindow = this.getWindow(planned.index, planned.row);
         ensureViewport(metaWindow, this);
         return true;
     }
@@ -1121,23 +1117,18 @@ export class Space extends Array {
             return false;
         }
         let row = space[index].indexOf(space.selectedWindow);
-        switch (direction) {
-        case Meta.MotionDirection.RIGHT:
-            index++;
+
+        if (direction === Meta.MotionDirection.RIGHT || direction === Meta.MotionDirection.LEFT) {
+            const next = stepColumn({
+                count: space.length,
+                index,
+                delta: direction === Meta.MotionDirection.RIGHT ? 1 : -1,
+                loop,
+            });
+            if (next === null)
+                return false;
+            index = next;
             row = -1;
-            break;
-        case Meta.MotionDirection.LEFT:
-            index--;
-            row = -1;
-        }
-        if (loop) {
-            if (index < 0) {
-                index = space.length - 1;
-            } else if (index >= space.length) {
-                index = 0;
-            }
-        } else if (index < 0 || index >= space.length) {
-            return false;
         }
 
         let column = space[index];
@@ -1148,21 +1139,16 @@ export class Space extends Array {
             row = column.indexOf(selected);
         }
 
-        switch (direction) {
-        case Meta.MotionDirection.UP:
-            row--;
-            break;
-        case Meta.MotionDirection.DOWN:
-            row++;
-        }
-        if (loop) {
-            if (row < 0) {
-                row = column.length - 1;
-            } else if (row >= column.length) {
-                row = 0;
-            }
-        } else if (row < 0 || row >= column.length) {
-            return false;
+        if (direction === Meta.MotionDirection.UP || direction === Meta.MotionDirection.DOWN) {
+            const next = stepRow({
+                count: column.length,
+                row,
+                delta: direction === Meta.MotionDirection.DOWN ? 1 : -1,
+                loop,
+            });
+            if (next === null)
+                return false;
+            row = next;
         }
 
         let metaWindow = space.getWindow(index, row);
