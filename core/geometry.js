@@ -46,6 +46,56 @@ export function targetWidthForColumn({ widths, selectedWidth, workAreaWidth, min
 }
 
 /**
+ * Plan one tiled row: preferred width, non-resizable override and the
+ * maximized-vertical offset.
+ *
+ * The caller applies the result, then feeds the observed frame size back in
+ * (synchronous X11 resizes). That feedback deliberately stays in the shell.
+ */
+export function planRow({
+    y,
+    targetWidth,
+    targetHeight,
+    gap,
+    verticalMargin,
+    workAreaWidth,
+    horizontalMargin,
+    resizable,
+    frameWidth,
+    frameHeight,
+    maximizedVertically,
+    preferredWidth,
+}) {
+    let width = targetWidth;
+    let height = targetHeight;
+    const warnings = [];
+
+    if (preferredWidth) {
+        const prop = preferredWidth;
+        if (prop.value <= 0) {
+            warnings.push('invalid preferredWidth value');
+        } else if (prop.unit === 'px') {
+            width = prop.value;
+        } else if (prop.unit === '%') {
+            const availableWidth = workAreaWidth - horizontalMargin * 2 - gap;
+            width = Math.floor(availableWidth * Math.min(prop.value / 100.0, 1.0));
+        } else {
+            warnings.push(`invalid preferredWidth unit: '${prop.unit}' (should be 'px' or '%')`);
+        }
+    }
+
+    if (!resizable) {
+        width = frameWidth;
+        height = frameHeight;
+    }
+
+    if (maximizedVertically)
+        y -= verticalMargin;
+
+    return { y, width, height, warnings };
+}
+
+/**
  * Whether the content currently sits centered, or overflows the right edge
  * while starting at or before the left edge.
  */

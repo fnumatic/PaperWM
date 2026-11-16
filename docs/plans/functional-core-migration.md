@@ -8,12 +8,13 @@ side effects. Exact APIs below are design proposals, not existing exports.
 
 Progress: M0 (test harness, boundary) and M1 (column allocation extraction) are
 implemented. M2 is partially implemented: work-area adjustment, column target
-widths and the auto-pan decision now live in `core/geometry.js`. Row planning,
-resize negotiation and viewport `ensuredX` remain in `tiling.js`.
+widths, per-row planning and the auto-pan decision now live in
+`core/geometry.js`. Synchronous resize feedback and viewport `ensuredX` remain
+in `tiling.js`.
 `node --test tests/core/` covers the extracted arithmetic and the import
 boundary; parity with the legacy implementation was checked on 20,000 generated
-columns and 20,000 geometry rounds before replacing it. State ownership and
-lifecycle changes remain open.
+columns, 20,000 rows and 20,000 geometry rounds before replacing it. State
+ownership and lifecycle changes remain open.
 
 Baseline: `custom-stable`, commit `2d460db` (`v51.0.0`).
 

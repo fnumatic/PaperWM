@@ -21,6 +21,7 @@ import {
 import {
     layoutWorkArea,
     targetWidthForColumn,
+    planRow,
     isAutoCentered,
     autoPanTargetX,
 } from './core/geometry.js';
@@ -584,22 +585,27 @@ export class Space extends Array {
 
             let resizable = !mw.fullscreen && !isMaximized(mw);
 
-            if (mw.preferredWidth) {
-                let prop = mw.preferredWidth;
-                if (prop.value <= 0) {
-                    console.warn("invalid preferredWidth value");
-                }
-                else if (prop.unit === 'px') {
-                    targetWidth = prop.value;
-                }
-                else if (prop.unit === '%') {
-                    let availableWidth = space.workArea().width - Settings.prefs.horizontal_margin * 2 - Settings.prefs.window_gap;
-                    targetWidth = Math.floor(availableWidth * Math.min(prop.value / 100.0, 1.0));
-                }
-                else {
-                    console.warn("invalid preferredWidth unit:", `'${prop.unit}'`, "(should be 'px' or '%')");
-                }
-            }
+            const planned = planRow({
+                y,
+                targetWidth,
+                targetHeight,
+                gap: Settings.prefs.window_gap,
+                verticalMargin: Settings.prefs.vertical_margin,
+                workAreaWidth: mw.preferredWidth?.unit === '%' && mw.preferredWidth.value > 0
+                    ? space.workArea().width
+                    : 0,
+                horizontalMargin: Settings.prefs.horizontal_margin,
+                resizable,
+                frameWidth: f.width,
+                frameHeight: f.height,
+                maximizedVertically: mw.maximized_vertically,
+                preferredWidth: mw.preferredWidth,
+            });
+            planned.warnings.forEach(w => console.warn(w));
+
+            targetWidth = planned.width;
+            targetHeight = planned.height;
+            y = planned.y;
 
             if (resizable) {
                 const hasNewTarget = mw._targetWidth !== targetWidth || mw._targetHeight !== targetHeight;
@@ -615,13 +621,6 @@ export class Space extends Array {
                 }
             } else {
                 mw.move_frame(true, space.monitor.x, space.monitor.y);
-                targetWidth = f.width;
-                targetHeight = f.height;
-            }
-            if (mw.maximized_vertically) {
-                // NOTE: This should really be f.y - monitor.y, but eg. firefox
-                // on wayland reports the wrong y coordinates at this point.
-                y -= Settings.prefs.vertical_margin;
             }
 
             // When resize is synchronous, ie. for X11 windows
