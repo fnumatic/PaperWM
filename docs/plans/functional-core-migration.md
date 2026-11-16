@@ -11,13 +11,14 @@ implemented. M2 is complete for arithmetic: work-area adjustment, column target
 widths, per-row planning, the auto-pan decision, the `ensuredX` viewport policy
 and the visibility/placeability predicates live in `core/geometry.js`. M3
 started: linear and directional navigation arithmetic lives in
-`core/navigation.js`. Synchronous resize feedback, stacking order, actor work
+`core/navigation.js`; open-window and swap targets live in
+`core/arrangement.js`. Synchronous resize feedback, stacking order, actor work
 and the `ensureViewport` animation path stay in `tiling.js`.
 `node --test tests/core/` covers the extracted arithmetic and the import
 boundary; parity with the legacy implementation was checked on 20,000 generated
 columns, 20,000 rows, 20,000 geometry rounds, 30,000 viewport rounds, 30,000
-navigation rounds and 120,000 visibility checks before replacing it. State
-ownership and lifecycle changes remain open.
+navigation rounds, 120,000 visibility checks and 60,000 arrangement checks
+before replacing it. State ownership and lifecycle changes remain open.
 
 Baseline: `custom-stable`, commit `2d460db` (`v51.0.0`).
 

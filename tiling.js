@@ -34,6 +34,10 @@ import {
     stepColumn,
     stepRow,
 } from './core/navigation.js';
+import {
+    openWindowIndex,
+    swapTarget,
+} from './core/arrangement.js';
 
 const { signals: Signals } = imports;
 const workspaceManager = global.workspace_manager;
@@ -1049,32 +1053,26 @@ export class Space extends Array {
         metaWindow = metaWindow || this.selectedWindow;
 
         let [index, row] = this.positionOf(metaWindow);
-        let targetIndex = index;
-        let targetRow = row;
-        switch (direction) {
-        case Meta.MotionDirection.LEFT:
-            targetIndex--;
-            break;
-        case Meta.MotionDirection.RIGHT:
-            targetIndex++;
-            break;
-        case Meta.MotionDirection.DOWN:
-            targetRow++;
-            break;
-        case Meta.MotionDirection.UP:
-            targetRow--;
-            break;
-        }
-        let column = this[index];
-        if (targetIndex < 0 || targetIndex >= this.length ||
-            targetRow < 0 || targetRow >= column.length)
+        const planned = swapTarget({
+            index,
+            row,
+            columnCount: this.length,
+            columnLength: this[index].length,
+            direction: {
+                [Meta.MotionDirection.LEFT]: 'left',
+                [Meta.MotionDirection.RIGHT]: 'right',
+                [Meta.MotionDirection.DOWN]: 'down',
+                [Meta.MotionDirection.UP]: 'up',
+            }[direction],
+        });
+        if (!planned)
             return;
 
-        Lib.swap(this[index], row, targetRow);
-        Lib.swap(this, index, targetIndex);
+        Lib.swap(this[index], row, planned.row);
+        Lib.swap(this, index, planned.index);
 
         this.layout();
-        this.emit('swapped', index, targetIndex, row, targetRow);
+        this.emit('swapped', index, planned.index, row, planned.row);
         ensureViewport(this.selectedWindow, this, { force: true });
     }
 
@@ -4347,23 +4345,17 @@ Opening "${metaWindow?.title}" on current space.`);
  * { RIGHT: 0, LEFT: 1, START: 2, END: 3 };
  */
 export function getOpenWindowPositionIndex(space) {
-    let index = -1; // init (-1 -> at beginning)
-    if (space?.selectedWindow) {
-        index = space.indexOf(space.selectedWindow);
-    }
+    const position = {
+        [Settings.OpenWindowPositions.LEFT]: 'left',
+        [Settings.OpenWindowPositions.START]: 'start',
+        [Settings.OpenWindowPositions.END]: 'end',
+    }[Settings.prefs.open_window_position] ?? 'right';
 
-    const pos = Settings.prefs.open_window_position;
-    switch (pos) {
-    case Settings.OpenWindowPositions.LEFT:
-        return index;
-    case Settings.OpenWindowPositions.START:
-        return 0;
-    case Settings.OpenWindowPositions.END:
-        // get number of columns in space
-        return space.length + 1;
-    default:
-        return index + 1;
-    }
+    return openWindowIndex({
+        selectedIndex: space?.selectedWindow ? space.indexOf(space.selectedWindow) : null,
+        columnCount: space?.length ?? 0,
+        position,
+    });
 }
 
 export function animateDown(metaWindow) {
