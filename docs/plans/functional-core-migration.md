@@ -7,9 +7,12 @@ document. The user requests a stable logical core isolated from coeffects and
 side effects. Exact APIs below are design proposals, not existing exports.
 
 Progress: M0 (test harness, boundary) and M1 (column allocation extraction) are
-implemented. `node --test tests/core/` covers the extracted arithmetic and the
-import boundary; parity with the legacy implementation was checked on 20,000
-generated columns before replacing it. Layout planning, state ownership and
+implemented. M2 is partially implemented: work-area adjustment, column target
+widths and the auto-pan decision now live in `core/geometry.js`. Row planning,
+resize negotiation and viewport `ensuredX` remain in `tiling.js`.
+`node --test tests/core/` covers the extracted arithmetic and the import
+boundary; parity with the legacy implementation was checked on 20,000 generated
+columns and 20,000 geometry rounds before replacing it. State ownership and
 lifecycle changes remain open.
 
 Baseline: `custom-stable`, commit `2d460db` (`v51.0.0`).

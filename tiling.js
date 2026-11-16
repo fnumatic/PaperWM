@@ -18,6 +18,12 @@ import {
     allocateDefault as allocateDefaultCore,
     allocateEqualHeight as allocateEqualHeightCore,
 } from './core/layout.js';
+import {
+    layoutWorkArea,
+    targetWidthForColumn,
+    isAutoCentered,
+    autoPanTargetX,
+} from './core/geometry.js';
 
 const { signals: Signals } = imports;
 const workspaceManager = global.workspace_manager;
@@ -685,32 +691,16 @@ export class Space extends Array {
          */
         const panelBoxHeight = Topbar.panelBox.height;
         const primaryMonitor = Main.layoutManager.primaryMonitor;
-        switch (true) {
-        case this.selectedWindow?.fullscreen:
-            workArea.y = 0;
+        workArea = layoutWorkArea({
+            workArea,
+            panelHeight: panelBoxHeight,
+            isPrimary: this.monitor === primaryMonitor,
+            showTopBar: this.showTopBar,
+            showPositionBar: this.showPositionBar,
+            selectedFullscreen: Boolean(this.selectedWindow?.fullscreen),
+        });
+        if (this.selectedWindow?.fullscreen)
             this.setSpaceTopbarElementsVisible(false);
-            break;
-        case this.monitor === primaryMonitor: {
-            if (!this.showTopBar) {
-                // remove panelbox height
-                workArea.y -= panelBoxHeight;
-                workArea.height += panelBoxHeight;
-
-                if (this.showPositionBar) {
-                    // add panelbox height if need to show window position bar
-                    workArea.y += panelBoxHeight;
-                    workArea.height -= panelBoxHeight;
-                }
-            }
-            break;
-        }
-        default:
-            if (this.showPositionBar) {
-                workArea.y += panelBoxHeight;
-                workArea.height -= panelBoxHeight;
-            }
-            break;
-        }
 
         let availableHeight = workArea.height;
         let y0 = workArea.y;
@@ -726,22 +716,15 @@ export class Space extends Array {
             // selected window in column
             const selectedInColumn = i === selectedIndex ? this.selectedWindow : null;
 
-            let targetWidth;
-            if (selectedInColumn) {
-                // if selected window - use tiledWidth or frame.width (fallback)
-                targetWidth =
-                    selectedInColumn?._fullscreen_frame?.tiledWidth ??
-                    selectedInColumn.get_frame_rect().width;
-            }
-            else {
-                // otherwise get max of tiledWith or frame.with (fallback)
-                targetWidth = Math.max(...column.map(w => {
-                    return w?._fullscreen_frame?.tiledWidth ?? w.get_frame_rect().width;
-                }));
-            }
-
-            // enforce minimum
-            targetWidth = Math.min(targetWidth, workArea.width - 2 * Settings.prefs.minimum_margin);
+            const widthOf = w =>
+                w?._fullscreen_frame?.tiledWidth ?? w.get_frame_rect().width;
+            const selectedWidth = selectedInColumn ? widthOf(selectedInColumn) : null;
+            const targetWidth = targetWidthForColumn({
+                widths: selectedWidth === null ? column.map(widthOf) : [],
+                selectedWidth,
+                workAreaWidth: workArea.width,
+                minimumMargin: Settings.prefs.minimum_margin,
+            });
 
             let resultingWidth, relayout;
             let allocator = allocators && allocators[i];
@@ -773,22 +756,22 @@ export class Space extends Array {
 
         this._inLayout = false;
         let oldWidth = this.cloneContainer.width;
-        let min = workArea.x;
-        let auto = (this.targetX + oldWidth >= min + workArea.width && this.targetX <= 0) ||
-            this.targetX === min + Math.round((workArea.width - oldWidth) / 2);
+        const auto = isAutoCentered({
+            targetX: this.targetX,
+            containerWidth: oldWidth,
+            workArea,
+        });
 
         // transforms break on width 1
         let width = Math.max(1, x - gap);
         this.cloneContainer.width = width;
 
         if (auto && animate) {
-            if (width < workArea.width) {
-                this.targetX = min + Math.round((workArea.width - width) / 2);
-            } else if (this.targetX + width < min + workArea.width) {
-                this.targetX = min + workArea.width - width;
-            } else if (this.targetX > workArea.min) {
-                this.targetX = workArea.x;
-            }
+            this.targetX = autoPanTargetX({
+                targetX: this.targetX,
+                contentWidth: width,
+                workArea,
+            });
             Easer.addEase(this.cloneContainer,
                 {
                     x: this.targetX,
