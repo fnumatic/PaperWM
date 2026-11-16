@@ -873,13 +873,11 @@ export class Space extends Array {
 
     isPlaceable(metaWindow) {
         let clone = metaWindow.clone;
-        let workArea = Main.layoutManager.getWorkAreaForMonitor(this.monitor.index);
 
         return isPlaceableCore({
             x: this.visibleX(metaWindow),
             width: clone.width,
-            workArea,
-            monitorX: this.monitor.x,
+            workArea: this.workArea(),
             stackMargin: stack_margin,
             maximized: isMaximized(metaWindow),
             fullscreen: Boolean(metaWindow.fullscreen),
@@ -1077,8 +1075,7 @@ export class Space extends Array {
         const planned = swapTarget({
             index,
             row,
-            columnCount: this.length,
-            columnLength: this[index].length,
+            columnLengths: this.map(column => column.length),
             direction: {
                 [Meta.MotionDirection.LEFT]: 'left',
                 [Meta.MotionDirection.RIGHT]: 'right',

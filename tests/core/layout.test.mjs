@@ -15,8 +15,19 @@ test('fitProportionally puts the rounding remainder on the first value', () => {
     assert.deepEqual(fitProportionally([100, 100], 999), [499, 500]);
 });
 
-test('fitProportionally returns NaN for a zero total (legacy behavior)', () => {
-    assert.deepEqual(fitProportionally([0, 0], 100), [NaN, NaN]);
+test('fitProportionally spreads evenly for a zero total', () => {
+    assert.deepEqual(fitProportionally([0, 0], 100), [50, 50]);
+    assert.deepEqual(fitProportionally([0, 0, 0], 100), [34, 33, 33]);
+});
+
+test('fitProportionally returns an empty array for empty input', () => {
+    assert.deepEqual(fitProportionally([], 100), []);
+});
+
+test('allocateDefault ignores an invalid selection index', () => {
+    assert.deepEqual(
+        allocateDefault({ heights: [100, 300], selectedIndex: -1, gap: 0, availableHeight: 800 }),
+        [200, 600]);
 });
 
 test('allocateDefault gives a single row the whole height', () => {

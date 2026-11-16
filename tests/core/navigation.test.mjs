@@ -30,10 +30,10 @@ test('nextLinear wraps with loop', () => {
         { index: 1, row: 2 });
 });
 
-test('nextLinear without loop keeps an out-of-range index for the caller', () => {
-    assert.deepEqual(
+test('nextLinear without loop refuses to leave the space', () => {
+    assert.equal(
         nextLinear({ columnLengths: [2, 3], index: 1, row: 2, dir: 1, loop: false }),
-        { index: 2, row: 2 });
+        null);
 });
 
 test('nextLinear returns null without a selected column', () => {

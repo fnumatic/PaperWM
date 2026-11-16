@@ -72,9 +72,10 @@ export function barfTarget({ index, columnLength, direction }) {
 /**
  * Target slot for a swap, or null when it leaves the space.
  *
- * `columnLength` is the source column's row count, as the legacy check used.
+ * The target row is checked against the target column, because the caller
+ * exchanges the columns first and then swaps rows inside the new column.
  */
-export function swapTarget({ index, row, columnCount, columnLength, direction }) {
+export function swapTarget({ index, row, columnLengths, direction }) {
     let targetIndex = index;
     let targetRow = row;
 
@@ -93,8 +94,10 @@ export function swapTarget({ index, row, columnCount, columnLength, direction })
         break;
     }
 
-    if (targetIndex < 0 || targetIndex >= columnCount ||
-        targetRow < 0 || targetRow >= columnLength)
+    const targetColumn = columnLengths[targetIndex];
+    if (targetColumn === undefined)
+        return null;
+    if (targetRow < 0 || targetRow >= targetColumn)
         return null;
 
     return { index: targetIndex, row: targetRow };

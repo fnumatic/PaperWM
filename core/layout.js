@@ -13,8 +13,18 @@
  */
 export function fitProportionally(values, targetSum) {
     const sum = values.reduce((a, b) => a + b, 0);
-    const weights = values.map(v => v / sum);
 
+    // Without measurable weights, spread evenly instead of producing NaN.
+    if (sum === 0) {
+        if (values.length === 0)
+            return [];
+        const each = Math.floor(targetSum / values.length);
+        const fitted = values.map(() => each);
+        fitted[0] += targetSum - each * values.length;
+        return fitted;
+    }
+
+    const weights = values.map(v => v / sum);
     const fitted = weights.map(w => Math.round(targetSum * w));
     const r = targetSum - fitted.reduce((a, b) => a + b, 0);
     fitted[0] += r;
@@ -37,7 +47,8 @@ export function allocateDefault({ heights, selectedIndex, selectedHeight, gap, a
     if (heights.length === 1)
         return [availableHeight];
 
-    const hasSelection = selectedIndex !== null && selectedIndex !== undefined;
+    const hasSelection = Number.isInteger(selectedIndex) &&
+        selectedIndex >= 0 && selectedIndex < heights.length;
     let nonSelected = heights.slice();
     if (hasSelection)
         nonSelected.splice(selectedIndex, 1);

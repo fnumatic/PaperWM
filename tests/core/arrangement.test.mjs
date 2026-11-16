@@ -19,16 +19,25 @@ test('openWindowIndex handles left, start and end', () => {
 
 test('swapTarget moves within the space', () => {
     assert.deepEqual(
-        swapTarget({ index: 1, row: 1, columnCount: 3, columnLength: 2, direction: 'left' }),
+        swapTarget({ index: 1, row: 1, columnLengths: [2, 2, 2], direction: 'left' }),
         { index: 0, row: 1 });
     assert.deepEqual(
-        swapTarget({ index: 1, row: 0, columnCount: 3, columnLength: 2, direction: 'down' }),
+        swapTarget({ index: 1, row: 0, columnLengths: [2, 2, 2], direction: 'down' }),
         { index: 1, row: 1 });
 });
 
 test('swapTarget refuses moves outside the space', () => {
-    assert.equal(swapTarget({ index: 0, row: 0, columnCount: 3, columnLength: 2, direction: 'left' }), null);
-    assert.equal(swapTarget({ index: 2, row: 0, columnCount: 3, columnLength: 2, direction: 'right' }), null);
-    assert.equal(swapTarget({ index: 1, row: 0, columnCount: 3, columnLength: 2, direction: 'up' }), null);
-    assert.equal(swapTarget({ index: 1, row: 1, columnCount: 3, columnLength: 2, direction: 'down' }), null);
+    assert.equal(swapTarget({ index: 0, row: 0, columnLengths: [2, 2, 2], direction: 'left' }), null);
+    assert.equal(swapTarget({ index: 2, row: 0, columnLengths: [2, 2, 2], direction: 'right' }), null);
+    assert.equal(swapTarget({ index: 1, row: 0, columnLengths: [2, 2, 2], direction: 'up' }), null);
+    assert.equal(swapTarget({ index: 1, row: 1, columnLengths: [2, 2, 2], direction: 'down' }), null);
+});
+
+test('swapTarget checks the target column height', () => {
+    assert.equal(
+        swapTarget({ index: 0, row: 1, columnLengths: [3, 1], direction: 'right' }),
+        null);
+    assert.deepEqual(
+        swapTarget({ index: 0, row: 1, columnLengths: [3, 3], direction: 'right' }),
+        { index: 1, row: 1 });
 });

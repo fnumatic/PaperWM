@@ -9,8 +9,8 @@
  * Move one window up/down in the current column, or into the next/previous
  * column at its first/last row.
  *
- * Mirrors `switchLinear`: without `loop`, an index outside the space is
- * returned as-is so the caller fails on `getWindow` like before.
+ * Returns null when the move leaves the space without looping. Every result is
+ * a valid slot; a null result means "no target".
  */
 export function nextLinear({ columnLengths, index, row, dir, loop }) {
     const count = columnLengths.length;
@@ -27,13 +27,10 @@ export function nextLinear({ columnLengths, index, row, dir, loop }) {
                 i = 0;
             else if (i < 0)
                 i = count - 1;
+        } else if (i < 0 || i >= count) {
+            return null;
         }
-        if (dir === 1) {
-            if (i < count)
-                r = 0;
-        } else if (i >= 0) {
-            r = columnLengths[i] - 1;
-        }
+        r = dir === 1 ? 0 : columnLengths[i] - 1;
     } else {
         r += dir;
     }

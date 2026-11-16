@@ -184,8 +184,8 @@ export function isFullyVisible({ x, width, workArea }) {
  *
  * `x` is monitor-local; `stackMargin` keeps a strip free at both edges.
  */
-export function isPlaceable({ x, width, workArea, monitorX, stackMargin, maximized, fullscreen }) {
-    const min = workArea.x - monitorX;
+export function isPlaceable({ x, width, workArea, stackMargin, maximized, fullscreen }) {
+    const min = workArea.x;
 
     if (x + width < min + stackMargin || x > min + workArea.width - stackMargin)
         return false;
@@ -203,16 +203,12 @@ export function isPlaceable({ x, width, workArea, monitorX, stackMargin, maximiz
  */
 export function isAutoCentered({ targetX, containerWidth, workArea }) {
     const min = workArea.x;
-    return (targetX + containerWidth >= min + workArea.width && targetX <= 0) ||
+    return (targetX + containerWidth >= min + workArea.width && targetX <= min) ||
         targetX === min + Math.round((workArea.width - containerWidth) / 2);
 }
 
 /**
  * Target scroll offset for an auto-centered layout.
- *
- * The legacy third branch compared against `workArea.min`, which never exists
- * on a work area, so it stayed unreachable. It is kept as-is and tests pin the
- * current result; changing it needs a separate decision.
  */
 export function autoPanTargetX({ targetX, contentWidth, workArea }) {
     const min = workArea.x;
@@ -222,8 +218,6 @@ export function autoPanTargetX({ targetX, contentWidth, workArea }) {
         return min + Math.round((workArea.width - width) / 2);
     if (targetX + width < min + workArea.width)
         return min + workArea.width - width;
-    if (targetX > workArea.min)
-        return workArea.x;
 
     return targetX;
 }

@@ -78,7 +78,6 @@ const cases = [
         cloneTargetX: 300,
         targetX: -100,
         lastFrameX: 120,
-        monitorX: 0,
         isVisible: false,
         frameWidth: frame.width,
         workArea,
@@ -91,7 +90,7 @@ const cases = [
     ['isVisible', () => isVisible({ x: 100, width: 500, workArea })],
     ['isFullyVisible', () => isFullyVisible({ x: 0, width: 1919, workArea })],
     ['isPlaceable', () => isPlaceable({
-        x: 100, width: 500, workArea, monitorX: 0, stackMargin: 75,
+        x: 100, width: 500, workArea, stackMargin: 75,
         maximized: false, fullscreen: false,
     })],
     ['nextLinear', () => nextLinear({
@@ -101,7 +100,7 @@ const cases = [
     ['stepRow', () => stepRow({ count: 2, row: 1, delta: 1, loop: true })],
     ['openWindowIndex', () => openWindowIndex({ selectedIndex: 1, columnCount: 3, position: 'right' })],
     ['swapTarget', () => swapTarget({
-        index: 1, row: 0, columnCount: 3, columnLength: 2, direction: 'down',
+        index: 1, row: 0, columnLengths: freezeDeep([2, 2, 2]), direction: 'down',
     })],
     ['slurpPlan', () => slurpPlan({
         index: 0, columnLengths: freezeDeep([2, 1]), direction: 'right', insertAt: 'bottom',

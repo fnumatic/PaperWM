@@ -1,63 +1,59 @@
 # Core review
 
-Date: 2026-11-16. Scope: `core/` at commit `71d2450` plus the changes in this
-round. Read-only findings from code inspection; behavior claims are backed by
-the parity scripts, not by a running desktop.
+Date: 2026-11-16. Scope: `core/` after the fixes in this round. Findings come
+from code inspection; behavior claims were checked with parity scripts against
+the pre-refactor implementation and with the unit tests.
 
-## Fixed in this round
+## Fixed: simplification
 
-- `layoutWorkArea` applied a panel-height change and immediately reversed it
-  when the position bar was visible. Now a single condition
-  (`!showTopBar && !showPositionBar`).
-- `ensuredX` took a `frame` object but used only `frame.width`, and a
-  `hasLastFrame` flag that duplicated `lastFrameX === undefined`. Now
-  `frameWidth` plus the existing `lastFrameX` convention.
-- `fitProportionally` indexed `weights` through the values array; now maps
+- `layoutWorkArea` applied a panel-height change and reversed it when the
+  position bar was visible. Now a single condition.
+- `ensuredX` took a `frame` object but used only `frame.width`, plus a
+  `hasLastFrame` flag duplicating `lastFrameX === undefined`. Now `frameWidth`
+  and the `lastFrameX` convention.
+- `fitProportionally` indexed weights through the values array; now maps
   weights directly.
 - `slurpPlan` guarded `columnLengths[from]` with `?? 0` after an explicit range
   check; removed.
 - `core/README.md` claimed window IDs; the core uses indices only.
 
-## Defects and contradictions (not changed)
+## Fixed: defects
 
-1. `navigation.js:41` — `nextLinear` returns an index outside the space when
-   `loop` is off and the step leaves the last column. Every other core function
-   returns `null` for an impossible result. The adapter then calls
-   `getWindow(outOfRange)` (returns `false`) and `ensureViewport(false)`.
-   Fix: return `null`; the adapter returns `false` like `switch()` does.
-2. `arrangement.js:96` — `swapTarget` checks `targetRow` against the *source*
-   column length but the swap happens in the *target* column after the columns
-   were exchanged. With different column heights this can trade in an
-   `undefined` row. Fix: pass the target column length as well.
-3. `geometry.js:211` — `isAutoCentered` compares `targetX <= 0` instead of
-   `targetX <= min`. Wrong for a monitor whose work area does not start at 0.
-   Legacy behavior, kept.
-4. `geometry.js:230` — `autoPanTargetX` compares against `workArea.min`, which
-   never exists, so the branch is unreachable. Documented and pinned by tests;
-   remove once the intent is confirmed.
-5. `layout.js:42` — when `selectedIndex` is `-1` (selected window lost its
-   actor and was filtered out), `splice(-1, 1)` removes the last row instead of
-   none. Reachable, legacy behavior, not changed.
-6. `layout.js:14` — `fitProportionally` yields `NaN` for a zero total. The
-   adapter now skips non-finite rows and logs; the core still returns `NaN`.
-7. `geometry.js:192` — `isPlaceable` uses the global work area while
-   `isVisible` uses the monitor-local one. A coordinate inconsistency inherited
-   from the original code.
+1. `nextLinear` now returns `null` instead of an index outside the space. Every
+   core result is a valid slot or `null`. `switchLinear` returns `false` on
+   `null`.
+2. `swapTarget` checks the target row against the **target** column length,
+   after the columns are exchanged. A shorter target column now yields `null`
+   instead of exchanging an `undefined` row.
+3. `isAutoCentered` compares against `workArea.x` instead of `0`, so monitors
+   with a non-zero origin behave correctly.
+4. `autoPanTargetX` lost the unreachable `workArea.min` branch.
+5. `allocateDefault` treats an invalid `selectedIndex` (`-1`, out of range, not
+   an integer) as "no selection" instead of removing the last row.
+6. `fitProportionally` spreads evenly for a zero total and returns `[]` for
+   empty input, instead of `NaN`.
+7. `isPlaceable` uses the monitor-local work area like the other predicates;
+   the `monitorX` parameter is gone.
 
-## Redundancy, left on purpose
+## Deliberate behavior changes
 
-- `visibleRatio` is a second name for `isFullyVisible`; the boolean return does
-  not match the name.
-- `stepColumn` and `stepRow` are identical; separate names document intent.
-- `autoPanTargetX` clamps `contentWidth` although the adapter already clamps it.
+Each item above changes behavior only where the old result was invalid
+(`NaN`, `undefined` row, dead branch) or wrong for a non-zero monitor origin.
+The unit tests pin the new results. The old parity scripts now report exactly
+these differences and are no longer used as a gate.
+
+## Left as is
+
+- `visibleRatio` remains a second name for `isFullyVisible`. Renaming it would
+  change the `Space` API.
+- `stepColumn` and `stepRow` are identical but carry different names and docs.
+- `autoPanTargetX` clamps `contentWidth` although the adapter already does.
 - `selectDndTarget` returns an `anchor` for column targets that the adapter
-  ignores.
+  ignores; it describes the same column geometry.
+- `openWindowIndex` returns `columnCount + 1` for `end`. Legacy, tested.
 
-## Next candidates
+## Verification
 
-1. Make `nextLinear` return `null` and adapt `switchLinear` — small, testable.
-2. Fix `swapTarget` with the target column length — needs a decision about
-   existing behavior.
-3. Decide on `isAutoCentered` and `autoPanTargetX` monitor-origin handling.
-
-Items 1 and 3 change observable behavior; each needs its own round and test.
+- 115 unit tests pass.
+- Isolated nested shell: three enable/disable cycles, no JS errors.
+- Live settings unchanged during the runs.
