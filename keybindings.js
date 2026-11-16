@@ -42,9 +42,9 @@ export function enable(extension) {
 }
 
 export function disable() {
-    signals.destroy();
+    signals?.destroy();
     signals = null;
-    actions.forEach(disableAction);
+    actions?.forEach(disableAction);
     Settings.restoreConflicts();
 
     keybindSettings = null;

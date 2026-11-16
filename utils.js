@@ -50,7 +50,7 @@ export function disable() {
     warpRipple = null;
     markNewClonesSignalId = null;
 
-    signals.destroy();
+    signals?.destroy();
     signals = null;
 }
 

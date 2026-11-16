@@ -59,12 +59,28 @@ export default class PaperWM extends Extension {
         this.enableUserConfig();
         this.enableUserStylesheet();
 
-        // run enable method (with extension argument on all modules)
-        this.modules.forEach(m => {
-            if (m['enable']) {
-                m.enable(this);
-            }
-        });
+        // Track successful modules so a failed enable can undo only those.
+        const started = [];
+        try {
+            // run enable method (with extension argument on all modules)
+            this.modules.forEach(m => {
+                if (m['enable']) {
+                    m.enable(this);
+                    started.push(m);
+                }
+            });
+        } catch (e) {
+            console.error('#PaperWM enable failed', e);
+            [...started].reverse().forEach(m => {
+                try {
+                    m.disable?.();
+                } catch (cleanupError) {
+                    console.error(`#PaperWM rollback failed in ${m.name ?? 'module'}`, cleanupError);
+                }
+            });
+            this.disableUserStylesheet();
+            throw e;
+        }
     }
 
     disable() {

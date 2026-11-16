@@ -121,6 +121,7 @@ let startupTimeoutId, timerId, fullscreenStartTimeout, stackSlurpTimeout, worksp
 let monitorChangeTimeout, driftTimeout;
 let workspaceSettings;
 let settingsSignalIds = [];
+let lifecycleGeneration = 0;
 export let inGrab;
 export function enable(extension) {
     inGrab = false;
@@ -179,7 +180,11 @@ export function enable(extension) {
 
     workspaceSettings = new WorkspaceSettings(extension);
     spaces = new Spaces();
+    const generation = ++lifecycleGeneration;
     let initWorkspaces = () => {
+        // A slow monitor upgrade can complete after disable.
+        if (generation !== lifecycleGeneration)
+            return;
         try {
             spaces.init();
         } catch (e) {
@@ -235,6 +240,7 @@ export function enable(extension) {
 }
 
 export function disable() {
+    lifecycleGeneration++;
     Utils.timeout_remove(startupTimeoutId);
     startupTimeoutId = null;
     Utils.timeout_remove(timerId);
