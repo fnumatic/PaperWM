@@ -26,9 +26,29 @@ if [ "${1:-}" = "--inner" ]; then
         cycle=1
         shift
     fi
+    smoke=0
+    if [ "${1:-}" = "--smoke" ]; then
+        smoke=1
+        shift
+    fi
 
     gnome-shell --devkit --wayland --wayland-display paperwm-dev "$@" &
     shell_pid=$!
+
+    if [ "$smoke" = 1 ]; then
+        for _ in $(seq 1 60); do
+            if gnome-extensions info "$UUID" >/dev/null 2>&1; then
+                break
+            fi
+            sleep 0.5
+        done
+        echo "smoke: opening alacritty"
+        alacritty --class paperwm-smoke >/dev/null 2>&1 &
+        client_pid=$!
+        sleep 5
+        kill "$client_pid" 2>/dev/null || true
+        kill "$shell_pid" 2>/dev/null || true
+    fi
 
     if [ "$cycle" = 1 ]; then
         for _ in $(seq 1 60); do

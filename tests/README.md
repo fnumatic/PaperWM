@@ -22,10 +22,13 @@ live extension symlink points here, and compares the live
 ```sh
 ./scripts/dev-shell.sh
 ./scripts/dev-shell.sh --cycle
+./scripts/dev-shell.sh --smoke
 ```
 
 `--cycle` disables and enables the extension three times in the isolated
 session, then exits; use it to check lifecycle cleanup in the log.
+`--smoke` opens an Alacritty window for a few seconds, then exits. It exercises
+a real Wayland client but does not prove the tiling result.
 
 Isolation uses `GSETTINGS_BACKEND=keyfile` and a private `XDG_RUNTIME_DIR`.
 Do not replace that with `dconf write`: dconf talks to the running session's
