@@ -5,6 +5,8 @@
  * actors and mutation outside. Inputs are copied, never modified.
  */
 
+const centeredX = (area, width) => area.x + Math.round((area.width - width) / 2);
+
 /**
  * Apply the topbar/position-bar adjustments to a work area.
  *
@@ -34,11 +36,11 @@ export function layoutWorkArea({ workArea, panelHeight, isPrimary, showTopBar, s
  * Column width from the selected window, or the widest row, capped to the
  * work area minus both minimum margins.
  *
- * An empty width list yields -Infinity, matching `Math.max()` in the caller.
+ * Tiny work areas still produce a usable positive target width.
  */
 export function targetWidthForColumn({ widths, selectedWidth, workAreaWidth, minimumMargin }) {
-    const base = selectedWidth ?? Math.max(...widths);
-    return Math.min(base, workAreaWidth - 2 * minimumMargin);
+    const base = selectedWidth ?? Math.max(1, ...widths);
+    return Math.max(1, Math.min(base, workAreaWidth - 2 * minimumMargin));
 }
 
 /**
@@ -63,18 +65,20 @@ export function planRow({
     preferredWidth,
 }) {
     let width = targetWidth;
-    let height = targetHeight;
+    // Native resize requests need a positive size, even when the row budget is zero.
+    let height = Math.max(1, targetHeight);
     const warnings = [];
 
     if (preferredWidth) {
         const prop = preferredWidth;
-        if (prop.value <= 0) {
+        const value = Number(prop.value);
+        if (!Number.isFinite(value) || value <= 0) {
             warnings.push('invalid preferredWidth value');
         } else if (prop.unit === 'px') {
-            width = prop.value;
+            width = value;
         } else if (prop.unit === '%') {
-            const availableWidth = workAreaWidth - horizontalMargin * 2 - gap;
-            width = Math.floor(availableWidth * Math.min(prop.value / 100.0, 1.0));
+            const availableWidth = Math.max(1, workAreaWidth - horizontalMargin * 2 - gap);
+            width = Math.max(1, Math.floor(availableWidth * Math.min(value / 100.0, 1.0)));
         } else {
             warnings.push(`invalid preferredWidth unit: '${prop.unit}' (should be 'px' or '%')`);
         }
@@ -112,7 +116,6 @@ export function ensuredX({
     workArea,
     horizontalMargin,
     windowGap,
-    minimumMargin,
 }) {
     const neighbour = Math.abs(selectedIndex - index) <= 1;
     const min = workArea.x;
@@ -124,16 +127,16 @@ export function ensuredX({
     else
         x = lastFrameX - monitorX;
 
-    if (focusMode === 'center') {
-        // window switching should centre focus
-        x = workArea.x + Math.round(workArea.width / 2 - frameWidth / 2);
-    } else if (fullscreen) {
+    if (fullscreen) {
         x = 0;
+    } else if (focusMode === 'center') {
+        // window switching should centre focus
+        x = centeredX(workArea, frameWidth);
     } else if (focusMode === 'edge') {
         // Align to the closest edge, with special cases for
         // only (center), first (left), and last (right) windows
         if (index === 0 && spaceLength === 1)
-            x = min + Math.round((workArea.width - frameWidth) / 2);
+            x = centeredX(workArea, frameWidth);
         else if (index === 0 || (Math.abs(x - min) < Math.abs(x + frameWidth - max) &&
             index !== spaceLength - 1))
             x = min + horizontalMargin;
@@ -141,20 +144,13 @@ export function ensuredX({
             x = max - horizontalMargin - frameWidth;
     } else if (frameWidth > workArea.width * 0.9 - 2 * (horizontalMargin + windowGap)) {
         // Consider the window to be wide and center it
-        x = min + Math.round((workArea.width - frameWidth) / 2);
+        x = centeredX(workArea, frameWidth);
     } else if (x + horizontalMargin + frameWidth > max) {
         // Align to the right margin
         x = max - horizontalMargin - frameWidth;
     } else if (x < min + horizontalMargin) {
         // Align to the left margin
         x = min + horizontalMargin;
-    } else if (x + frameWidth === max) {
-        // When opening new windows at the end, in the background, we want to
-        // show some minimup margin
-        x = max - minimumMargin - frameWidth;
-    } else if (x === min) {
-        // Same for the start (though the case isn't as common)
-        x = min + minimumMargin;
     }
 
     return x;
@@ -168,7 +164,7 @@ export function ensuredX({
  */
 export function isVisible({ x, width, workArea, margin = 0 }) {
     const min = workArea.x;
-    return !(x - margin + width < min || x + margin > min + workArea.width);
+    return x + width >= min + margin && x <= min + workArea.width - margin;
 }
 
 /**
@@ -185,39 +181,21 @@ export function isFullyVisible({ x, width, workArea }) {
  * `x` is monitor-local; `stackMargin` keeps a strip free at both edges.
  */
 export function isPlaceable({ x, width, workArea, stackMargin, maximized, fullscreen }) {
-    const min = workArea.x;
-
-    if (x + width < min + stackMargin || x > min + workArea.width - stackMargin)
-        return false;
-
-    // Fullscreen windows are only placeable on the monitor origin
-    if ((maximized && x !== min) || (fullscreen && x !== 0))
-        return false;
-
-    return true;
+    return isVisible({ x, width, workArea, margin: stackMargin }) &&
+        (!maximized || x === workArea.x) && (!fullscreen || x === 0);
 }
 
 /**
- * Whether the content currently sits centered, or overflows the right edge
- * while starting at or before the left edge.
+ * Preserve automatic centering/edge alignment after content changes.
+ * Return null when the user has scrolled elsewhere. Widths are already clamped
+ * by the caller; offsets and work area are monitor-local.
  */
-export function isAutoCentered({ targetX, containerWidth, workArea }) {
+export function autoPanTargetX({ targetX, containerWidth, contentWidth, workArea }) {
     const min = workArea.x;
-    return (targetX + containerWidth >= min + workArea.width && targetX <= min) ||
-        targetX === min + Math.round((workArea.width - containerWidth) / 2);
-}
-
-/**
- * Target scroll offset for an auto-centered layout.
- */
-export function autoPanTargetX({ targetX, contentWidth, workArea }) {
-    const min = workArea.x;
-    const width = Math.max(1, contentWidth);
-
-    if (width < workArea.width)
-        return min + Math.round((workArea.width - width) / 2);
-    if (targetX + width < min + workArea.width)
-        return min + workArea.width - width;
-
-    return targetX;
+    const aligned = targetX + containerWidth >= min + workArea.width && targetX <= min;
+    if (!aligned && targetX !== centeredX(workArea, containerWidth))
+        return null;
+    if (contentWidth < workArea.width)
+        return centeredX(workArea, contentWidth);
+    return Math.min(min, Math.max(targetX, min + workArea.width - contentWidth));
 }

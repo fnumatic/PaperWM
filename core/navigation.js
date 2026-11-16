@@ -1,73 +1,26 @@
-/**
- * Pure navigation arithmetic over column lengths.
- *
- * `columnLengths` is the number of rows per column. Windows, stacking order and
- * viewport changes stay with the caller.
- */
+/** One bounded/wrapping index operation for both rows and columns. */
+export function stepIndex({ count, index, delta, loop }) {
+    if (count <= 0)
+        return null;
+    const next = index + delta;
+    return loop ? ((next % count) + count) % count
+        : next >= 0 && next < count ? next : null;
+}
 
-/**
- * Move one window up/down in the current column, or into the next/previous
- * column at its first/last row.
- *
- * Returns null when the move leaves the space without looping. Every result is
- * a valid slot; a null result means "no target".
- */
+/** Linear navigation skips empty columns; every result is a valid slot or null. */
 export function nextLinear({ columnLengths, index, row, dir, loop }) {
-    const count = columnLengths.length;
-    let i = index;
-    let r = row;
-
-    if (columnLengths[i] === undefined)
+    if ((dir !== 1 && dir !== -1) || row < 0 || row >= (columnLengths[index] ?? 0))
         return null;
+    const nextRow = stepIndex({ count: columnLengths[index], index: row, delta: dir, loop: false });
+    if (nextRow !== null)
+        return { index, row: nextRow };
 
-    if (row + dir < 0 || row + dir >= columnLengths[i]) {
-        i += dir;
-        if (loop) {
-            if (i >= count)
-                i = 0;
-            else if (i < 0)
-                i = count - 1;
-        } else if (i < 0 || i >= count) {
+    for (let visited = 0; visited < columnLengths.length; visited++) {
+        index = stepIndex({ count: columnLengths.length, index, delta: dir, loop });
+        if (index === null)
             return null;
-        }
-        r = dir === 1 ? 0 : columnLengths[i] - 1;
-    } else {
-        r += dir;
+        if (columnLengths[index] > 0)
+            return { index, row: dir === 1 ? 0 : columnLengths[index] - 1 };
     }
-
-    return { index: i, row: r };
-}
-
-/**
- * Step to an adjacent column. Returns null when the step leaves the space and
- * looping is off.
- */
-export function stepColumn({ count, index, delta, loop }) {
-    let i = index + delta;
-    if (loop) {
-        if (i >= count)
-            i = 0;
-        else if (i < 0)
-            i = count - 1;
-    } else if (i < 0 || i >= count) {
-        return null;
-    }
-    return i;
-}
-
-/**
- * Step within a column. Returns null when the step leaves the column and
- * looping is off.
- */
-export function stepRow({ count, row, delta, loop }) {
-    let r = row + delta;
-    if (loop) {
-        if (r < 0)
-            r = count - 1;
-        else if (r >= count)
-            r = 0;
-    } else if (r < 0 || r >= count) {
-        return null;
-    }
-    return r;
+    return null;
 }

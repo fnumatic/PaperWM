@@ -6,19 +6,18 @@
 /**
  * Column index for a newly opened window.
  *
- * `selectedIndex` is -1 when no window is selected. `end` intentionally returns
- * `columnCount + 1`, matching the legacy behaviour.
+ * Insertion positions include columnCount (append); no negative splice indices.
  */
 export function openWindowIndex({ selectedIndex, columnCount, position }) {
-    const index = selectedIndex ?? -1;
+    const index = Math.max(-1, Math.min(columnCount - 1, selectedIndex ?? -1));
 
     switch (position) {
     case 'left':
-        return index;
+        return Math.max(0, index);
     case 'start':
         return 0;
     case 'end':
-        return columnCount + 1;
+        return columnCount;
     default:
         return index + 1;
     }
@@ -27,11 +26,10 @@ export function openWindowIndex({ selectedIndex, columnCount, position }) {
 /**
  * Plan for stacking a neighbouring column into the current one.
  *
- * `from` is the neighbour column; `position` is where the window enters the
- * current column. `push` appends, matching the legacy default branch.
+ * `from` is the neighbour column; `row` is the insertion position in the target.
  */
 export function slurpPlan({ index, columnLengths, direction, insertAt, rowIndex }) {
-    if (columnLengths.length < 2)
+    if (!(columnLengths[index] > 0))
         return null;
 
     const from = direction === 'left' || direction === 'start'
@@ -45,13 +43,13 @@ export function slurpPlan({ index, columnLengths, direction, insertAt, rowIndex 
 
     switch (insertAt) {
     case 'above':
-        return { from, position: { index: rowIndex } };
+        return { from, row: rowIndex };
     case 'below':
-        return { from, position: { index: rowIndex + 1 } };
+        return { from, row: rowIndex + 1 };
     case 'top':
-        return { from, position: { index: 0 } };
+        return { from, row: 0 };
     default:
-        return { from, position: { push: true } };
+        return { from, row: columnLengths[index] };
     }
 }
 
@@ -61,19 +59,17 @@ export function slurpPlan({ index, columnLengths, direction, insertAt, rowIndex 
  * legacy splice order.
  */
 export function barfTarget({ index, columnLength, direction }) {
-    if (columnLength < 2)
+    if (index < 0 || columnLength < 2)
         return null;
 
-    return {
-        to: direction === 'left' || direction === 'start' ? index : index + 1,
-    };
+    return direction === 'left' || direction === 'start' ? index : index + 1;
 }
 
 /**
  * Target slot for a swap, or null when it leaves the space.
  *
- * The target row is checked against the target column, because the caller
- * exchanges the columns first and then swaps rows inside the new column.
+ * Horizontal moves exchange whole columns. Vertical moves exchange rows
+ * inside the source column; the destination column's row count is irrelevant.
  */
 export function swapTarget({ index, row, columnLengths, direction }) {
     let targetIndex = index;
@@ -92,12 +88,14 @@ export function swapTarget({ index, row, columnLengths, direction }) {
     case 'up':
         targetRow--;
         break;
+    default:
+        return null;
     }
 
-    const targetColumn = columnLengths[targetIndex];
-    if (targetColumn === undefined)
-        return null;
-    if (targetRow < 0 || targetRow >= targetColumn)
+    const sourceLength = columnLengths[index] ?? 0;
+    if (row < 0 || row >= sourceLength ||
+        targetRow < 0 || targetRow >= sourceLength ||
+        targetIndex < 0 || targetIndex >= columnLengths.length)
         return null;
 
     return { index: targetIndex, row: targetRow };

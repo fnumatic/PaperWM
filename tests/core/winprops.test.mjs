@@ -19,6 +19,25 @@ test('winpropMatches supports regular expressions', () => {
         true);
 });
 
+test('regex matching does not consume sticky state between calls', () => {
+    const pattern = /Firefox/y;
+    const prop = { wm_class: pattern };
+    const window = { wmClass: 'Firefox' };
+    assert.equal(winpropMatches(window, prop), true);
+    assert.equal(pattern.lastIndex, 0);
+    assert.equal(winpropMatches(window, prop), true);
+});
+
+test('regex matching accepts frozen patterns and preserves their cursor', () => {
+    for (const flags of ['g', 'y']) {
+        const pattern = new RegExp('Firefox', flags);
+        pattern.lastIndex = 3;
+        Object.freeze(pattern);
+        assert.equal(winpropMatches({ title: 'Firefox' }, { title: pattern }), true);
+        assert.equal(pattern.lastIndex, 3);
+    }
+});
+
 test('winpropMatches matches titles and combines both fields', () => {
     assert.equal(winpropMatches({ wmClass: 'A', title: 'Scratch' }, { title: 'Scratch' }), true);
     assert.equal(

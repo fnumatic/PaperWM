@@ -386,8 +386,7 @@ export function defwinprop(spec) {
     if (spec.preferredWidth) {
         spec.preferredWidth = {
             // value is first contiguous block of digits
-            // eslint-disable-next-line no-new-wrappers
-            value: new Number((spec.preferredWidth.match(/\d+/) ?? ['0'])[0]),
+            value: Number((spec.preferredWidth.match(/\d+/) ?? ['0'])[0]),
             // unit is first contiguous block of apha chars or % char
             unit: (spec.preferredWidth.match(/[a-zA-Z%]+/) ?? ['NO_UNIT'])[0],
         };

@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import {
     layoutWorkArea,
     targetWidthForColumn,
-    isAutoCentered,
     autoPanTargetX,
 } from '../../core/geometry.js';
 
@@ -90,32 +89,43 @@ test('targetWidthForColumn caps to the work area margins', () => {
     }), 1890);
 });
 
-test('isAutoCentered detects centered and right-overflowing content', () => {
-    assert.equal(isAutoCentered({
-        targetX: 0, containerWidth: 2500, workArea,
-    }), true);
-    assert.equal(isAutoCentered({
-        targetX: Math.round((1920 - 1000) / 2), containerWidth: 1000, workArea,
-    }), true);
-    assert.equal(isAutoCentered({
-        targetX: -500, containerWidth: 1000, workArea,
-    }), false);
+test('auto-pan leaves a manually scrolled viewport alone', () => {
+    assert.equal(autoPanTargetX({
+        targetX: -500, containerWidth: 1000, contentWidth: 2500, workArea,
+    }), null);
+});
+
+test('auto-pan does not leave a gap when centered content becomes wider', () => {
+    assert.equal(autoPanTargetX({
+        targetX: 460, containerWidth: 1000, contentWidth: 2500, workArea,
+    }), 0);
 });
 
 test('autoPanTargetX centers content narrower than the work area', () => {
     assert.equal(autoPanTargetX({
-        targetX: -200, contentWidth: 1000, workArea,
+        targetX: -200, containerWidth: 2500, contentWidth: 1000, workArea,
     }), 460);
 });
 
 test('autoPanTargetX clamps overflowing content to the right edge', () => {
     assert.equal(autoPanTargetX({
-        targetX: -4000, contentWidth: 2500, workArea,
+        targetX: -4000, containerWidth: 6000, contentWidth: 2500, workArea,
     }), -580);
 });
 
 test('autoPanTargetX keeps the offset when no branch applies', () => {
     assert.equal(autoPanTargetX({
-        targetX: -100, contentWidth: 2500, workArea,
+        targetX: -100, containerWidth: 2500, contentWidth: 2500, workArea,
     }), -100);
+});
+
+test('auto-pan uses monitor-local work-area origins, including negative origins', () => {
+    assert.equal(autoPanTargetX({
+        targetX: 100, containerWidth: 2500, contentWidth: 1000,
+        workArea: { x: 100, width: 1920 },
+    }), 560);
+    assert.equal(autoPanTargetX({
+        targetX: 0, containerWidth: 2500, contentWidth: 1000,
+        workArea: { x: -100, width: 1920 },
+    }), null);
 });

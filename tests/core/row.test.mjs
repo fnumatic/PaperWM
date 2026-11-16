@@ -29,6 +29,27 @@ test('planRow applies a pixel preferred width', () => {
     assert.equal(result.width, 600);
 });
 
+test('pixel preferences become primitive numbers, not boxed Number values', () => {
+    const result = planRow({ ...base, preferredWidth: { value: Object(600), unit: 'px' } });
+    assert.equal(result.width, 600);
+    assert.equal(Number.isFinite(result.width), true);
+});
+
+test('native targets remain positive when margins or row budgets exhaust the work area', () => {
+    const result = planRow({
+        ...base, workAreaWidth: 10, targetHeight: 0,
+        preferredWidth: { value: 50, unit: '%' },
+    });
+    assert.equal(result.width, 1);
+    assert.equal(result.height, 1);
+});
+
+test('non-finite preferred widths warn instead of poisoning a target', () => {
+    const result = planRow({ ...base, preferredWidth: { value: NaN, unit: 'px' } });
+    assert.equal(result.width, 800);
+    assert.equal(result.warnings.length, 1);
+});
+
 test('planRow computes a percentage against margins and gap', () => {
     const result = planRow({ ...base, preferredWidth: { value: 50, unit: '%' } });
     assert.equal(result.width, Math.floor((1920 - 20 - 8) * 0.5));

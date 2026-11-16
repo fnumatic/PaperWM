@@ -68,7 +68,6 @@ export class MoveGrab {
         this.wasTiled = !(this.initialSpace.isFloating(metaWindow) ||
             Scratch.isScratchWindow(metaWindow));
 
-        this.dndTargets = [];
     }
 
     begin({ center } = {}) {
@@ -214,44 +213,24 @@ export class MoveGrab {
     /** x,y in scroll cooridinates */
     selectDndZone(space, x, y, initial = false) {
         const gap = Settings.prefs.window_gap;
-        const halfGap = gap / 2;
-        const columnZoneMarginViz = 100 + halfGap;
-        const columnZoneMargin = space.length > 0 ? columnZoneMarginViz : Math.round(space.width / 4);
-        const rowZoneMargin = 250 + halfGap;
         const tilingHeight = space.height - Main.layoutManager.panelBox.height;
 
-        let emptyTargetX = 0;
-        if (space.length === 0) {
-            let [sx] = space.viewportToScroll(Math.round(space.width / 2), 0);
-            emptyTargetX = sx + halfGap;
-        }
-
         const planned = selectDndTarget({
-            columns: space.map(column => ({
-                x: column[0].clone.targetX,
-                width: column[0].clone.width,
-                rows: column.map(mw => ({
-                    x: mw.clone.targetX,
-                    y: mw.clone.targetY,
-                    width: mw.clone.width,
-                    height: mw.clone.height,
-                })),
-            })),
-            x,
-            y,
-            gap,
-            columnZoneMargin,
-            columnZoneMarginViz,
-            rowZoneMargin,
-            emptyTargetX,
+            columns: space.map(column => column.map(({ clone }) => ({
+                x: clone.targetX, y: clone.targetY, width: clone.width, height: clone.height,
+            }))),
+            x, y, gap, viewportWidth: space.width, scrollOffsetX: space.targetX,
         });
 
+        const vertical = planned?.position.length === 2;
         const target = planned && {
             ...planned,
             space,
-            actorParams: planned.originProp === 'x'
-                ? { y: Main.layoutManager.panelBox.height, height: tilingHeight }
-                : { x: planned.anchor.x, width: planned.anchor.width },
+            originProp: vertical ? 'y' : 'x',
+            sizeProp: vertical ? 'height' : 'width',
+            actorParams: vertical
+                ? planned.anchor
+                : { y: Main.layoutManager.panelBox.height, height: tilingHeight },
         };
 
         const sameTarget = (a, b) => {
@@ -511,6 +490,9 @@ export class MoveGrab {
     }
 
     activateDndTarget(zone, first) {
+        if (this.dndTarget)
+            this.deactivateDndTarget(this.dndTarget);
+        this.dndTarget = zone;
         if (!zone) {
             return;
         }
@@ -525,11 +507,6 @@ export class MoveGrab {
 
         zone.actor = mkZoneActor({ ...zone.actorParams });
 
-        // deactivate previous target
-        this.dndTargets.filter(t => t !== zone).forEach(t => this.deactivateDndTarget(t));
-        this.dndTargets = [zone];
-
-        this.dndTarget = zone;
         this.zoneActors.add(zone.actor);
         const raise = () => Utils.actor_raise(zone.actor);
 

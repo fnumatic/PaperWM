@@ -23,7 +23,6 @@ import {
     targetWidthForColumn,
     planRow,
     ensuredX as ensuredXCore,
-    isAutoCentered,
     autoPanTargetX,
     isVisible as isVisibleCore,
     isFullyVisible as isFullyVisibleCore,
@@ -31,8 +30,7 @@ import {
 } from './core/geometry.js';
 import {
     nextLinear as nextLinearCore,
-    stepColumn,
-    stepRow,
+    stepIndex,
 } from './core/navigation.js';
 import {
     openWindowIndex,
@@ -597,12 +595,13 @@ export class Space extends Array {
         return [targetWidth, needRelayout];
     }
 
-    layoutColumnSimple(windows, x, y0, targetWidth, targetHeights, time) {
+    layoutColumnSimple(windows, x, y0, columnTargetWidth, targetHeights, time) {
         let space = this;
         let y = y0;
 
         let widthChanged = false;
         let heightChanged = false;
+        let columnWidth = 0;
 
         for (let i = 0; i < windows.length; i++) {
             let mw = windows[i];
@@ -614,7 +613,7 @@ export class Space extends Array {
 
             const planned = planRow({
                 y,
-                targetWidth,
+                targetWidth: columnTargetWidth,
                 targetHeight,
                 gap: Settings.prefs.window_gap,
                 verticalMargin: Settings.prefs.vertical_margin,
@@ -630,16 +629,15 @@ export class Space extends Array {
             });
             planned.warnings.forEach(w => console.warn(w));
 
-            targetWidth = planned.width;
-            targetHeight = planned.height;
-            y = planned.y;
-
-            if (!Number.isFinite(targetWidth) || !Number.isFinite(targetHeight) || !Number.isFinite(y)) {
+            if (!Number.isFinite(planned.width) || !Number.isFinite(planned.height) || !Number.isFinite(planned.y)) {
                 console.error(
                     `#PaperWM skip non-finite layout for '${mw.title}'`,
-                    { targetWidth, targetHeight, y, column: windows.length });
+                    { targetWidth: planned.width, targetHeight: planned.height, y: planned.y, column: windows.length });
                 continue;
             }
+            let targetWidth = planned.width;
+            targetHeight = planned.height;
+            y = planned.y;
 
             if (resizable) {
                 const hasNewTarget = mw._targetWidth !== targetWidth || mw._targetHeight !== targetHeight;
@@ -666,6 +664,8 @@ export class Space extends Array {
                 heightChanged = true;
                 targetHeight = nf.height; // Use actually height for layout
             }
+            // A rejected/pending shrink must not place the next row inside this one.
+            targetHeight = Math.max(targetHeight, nf.height);
 
             let c = mw.clone;
             if (c.x !== x || c.targetX !== x ||
@@ -685,9 +685,10 @@ export class Space extends Array {
                 }
             }
 
+            columnWidth = Math.max(columnWidth, targetWidth, nf.width);
             y += targetHeight + Settings.prefs.window_gap;
         }
-        return [targetWidth, widthChanged || heightChanged, y];
+        return [columnWidth, widthChanged || heightChanged, y];
     }
 
     layout(animate = true, options = {}) {
@@ -789,22 +790,20 @@ export class Space extends Array {
 
         this._inLayout = false;
         let oldWidth = this.cloneContainer.width;
-        const auto = isAutoCentered({
+        // One core decision replaces separate "is automatic" and target inputs.
+        let width = Math.max(1, x - gap);
+        const autoTargetX = autoPanTargetX({
             targetX: this.targetX,
             containerWidth: oldWidth,
+            contentWidth: width,
             workArea,
         });
 
         // transforms break on width 1
-        let width = Math.max(1, x - gap);
         this.cloneContainer.width = width;
 
-        if (auto && animate) {
-            this.targetX = autoPanTargetX({
-                targetX: this.targetX,
-                contentWidth: width,
-                workArea,
-            });
+        if (autoTargetX !== null && animate) {
+            this.targetX = autoTargetX;
             Easer.addEase(this.cloneContainer,
                 {
                     x: this.targetX,
@@ -1071,7 +1070,10 @@ export class Space extends Array {
     swap(direction, metaWindow) {
         metaWindow = metaWindow || this.selectedWindow;
 
-        let [index, row] = this.positionOf(metaWindow);
+        const position = this.positionOf(metaWindow);
+        if (!position)
+            return;
+        let [index, row] = position;
         const planned = swapTarget({
             index,
             row,
@@ -1127,7 +1129,7 @@ export class Space extends Array {
         let row = space[index].indexOf(space.selectedWindow);
 
         if (direction === Meta.MotionDirection.RIGHT || direction === Meta.MotionDirection.LEFT) {
-            const next = stepColumn({
+            const next = stepIndex({
                 count: space.length,
                 index,
                 delta: direction === Meta.MotionDirection.RIGHT ? 1 : -1,
@@ -1148,9 +1150,9 @@ export class Space extends Array {
         }
 
         if (direction === Meta.MotionDirection.UP || direction === Meta.MotionDirection.DOWN) {
-            const next = stepRow({
+            const next = stepIndex({
                 count: column.length,
-                row,
+                index: row,
                 delta: direction === Meta.MotionDirection.DOWN ? 1 : -1,
                 loop,
             });
@@ -4359,17 +4361,19 @@ Opening "${metaWindow?.title}" on current space.`);
  * Gets the window index to add a new window in the space:
  * { RIGHT: 0, LEFT: 1, START: 2, END: 3 };
  */
-export function getOpenWindowPositionIndex(space) {
-    const position = {
+function openWindowPosition() {
+    return {
         [Settings.OpenWindowPositions.LEFT]: 'left',
         [Settings.OpenWindowPositions.START]: 'start',
         [Settings.OpenWindowPositions.END]: 'end',
     }[Settings.prefs.open_window_position] ?? 'right';
+}
 
+export function getOpenWindowPositionIndex(space) {
     return openWindowIndex({
         selectedIndex: space?.selectedWindow ? space.indexOf(space.selectedWindow) : null,
         columnCount: space?.length ?? 0,
-        position,
+        position: openWindowPosition(),
     });
 }
 
@@ -4411,7 +4415,6 @@ export function ensuredX(meta_window, space) {
         workArea,
         horizontalMargin: Settings.prefs.horizontal_margin,
         windowGap: Settings.prefs.window_gap,
-        minimumMargin: Settings.prefs.minimum_margin,
     });
 }
 
@@ -5236,13 +5239,12 @@ export function fitProportionally(values, targetSum) {
 }
 
 export function allocateDefault(column, availableHeight, selectedWindow) {
-    const heightOf = mw => mw._targetHeight || mw.get_frame_rect().height;
+    const heightOf = mw => mw._targetHeight > 0 ? mw._targetHeight : mw.get_frame_rect().height;
     const selectedIndex = selectedWindow ? column.indexOf(selectedWindow) : null;
 
     return allocateDefaultCore({
         heights: column.map(heightOf),
         selectedIndex,
-        selectedHeight: selectedWindow ? heightOf(selectedWindow) : 0,
         gap: Settings.prefs.window_gap,
         availableHeight,
     });
@@ -5274,15 +5276,12 @@ export function slurp(metaWindow, insertAt = SlurpInsertPosition.BOTTOM) {
     }
 
     const index = space.indexOf(metaWindow);
+    if (index === -1)
+        return;
     const planned = slurpPlan({
         index,
         columnLengths: space.map(column => column.length),
-        direction: {
-            [Settings.OpenWindowPositions.LEFT]: 'left',
-            [Settings.OpenWindowPositions.START]: 'start',
-            [Settings.OpenWindowPositions.RIGHT]: 'right',
-            [Settings.OpenWindowPositions.END]: 'end',
-        }[Settings.prefs.open_window_position] ?? 'right',
+        direction: openWindowPosition(),
         insertAt: {
             [SlurpInsertPosition.ABOVE]: 'above',
             [SlurpInsertPosition.BELOW]: 'below',
@@ -5291,7 +5290,7 @@ export function slurp(metaWindow, insertAt = SlurpInsertPosition.BOTTOM) {
         }[insertAt],
         rowIndex: space[index].indexOf(metaWindow),
     });
-    if (!planned)
+    if (planned === null)
         return;
 
     const from = planned.from;
@@ -5303,10 +5302,7 @@ export function slurp(metaWindow, insertAt = SlurpInsertPosition.BOTTOM) {
     }
 
     const spaceTo = space[index];
-    if (planned.position.push)
-        spaceTo.push(metaWindowToSlurp);
-    else
-        spaceTo.splice(planned.position.index, 0, metaWindowToSlurp);
+    spaceTo.splice(planned.row, 0, metaWindowToSlurp);
 
     { // Remove the slurped window
         const column = space[from];
@@ -5346,27 +5342,24 @@ export function barf(metaWindow, expelWindow) {
     const planned = barfTarget({
         index,
         columnLength: column.length,
-        direction: {
-            [Settings.OpenWindowPositions.LEFT]: 'left',
-            [Settings.OpenWindowPositions.START]: 'start',
-            [Settings.OpenWindowPositions.RIGHT]: 'right',
-            [Settings.OpenWindowPositions.END]: 'end',
-        }[Settings.prefs.open_window_position] ?? 'right',
+        direction: openWindowPosition(),
     });
-    if (!planned)
+    if (planned === null)
         return;
 
     // // remove metawindow from column
     if (expelWindow) {
         // remove expelWindow from current column
         const indexOfWindow = column.indexOf(expelWindow);
+        if (indexOfWindow === -1)
+            return;
         column.splice(indexOfWindow, 1);
     }
     else {
         // remove from bottom
         expelWindow = column.splice(-1, 1)[0];
     }
-    space.splice(planned.to, 0, [expelWindow]);
+    space.splice(planned, 0, [expelWindow]);
 
     space.layout(true, {
         customAllocators: { [space.indexOf(metaWindow)]: allocateEqualHeight, ensure: false },

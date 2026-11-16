@@ -4,11 +4,19 @@ Run with Node 22 or newer; no dependencies needed:
 
 ```sh
 node --test tests/core/
+gjs -m tests/gjs-core.js
 ```
 
 - `layout.test.mjs`: column allocation arithmetic, including legacy edge cases.
 - `utils.test.mjs`: existing GI-free helpers (`lib.js`, `acceleratorparse.js`).
 - `boundary.test.mjs`: core modules must not import GI, shell, Node or barrel code.
+- `invariants.test.mjs`: bounded dimension/slot checks over fixed input grids.
+- `adapter.test.mjs`: actual method bodies with small fakes; not a GNOME runtime test.
+- `gjs-core.js`: imports and smoke assertions in GJS, without a desktop.
+
+The boundary scan is a conservative source check, not a proof of purity.
+Regression tests must cover side effects hidden in inputs too, such as mutable
+RegExp matching state. High line coverage alone does not establish correctness.
 
 Tests are not part of the extension archive. `make release` ignores this folder.
 

@@ -1,80 +1,43 @@
-/**
- * Pure column-height arithmetic.
- *
- * No GI imports, settings, actors or timers. Callers pass measured values and
- * the current preferences. Results mirror the legacy implementation; the
- * accompanying tests characterize its edge cases instead of changing them.
- */
-
-/**
- * "Fit" values such that they sum to `targetSum`.
- * A zero total produces NaN, as the legacy implementation did. Empty input
- * returns an array containing NaN.
- */
+/** Allocate non-negative dimensions from finite observed heights and a budget. */
 export function fitProportionally(values, targetSum) {
-    const sum = values.reduce((a, b) => a + b, 0);
-
-    // Without measurable weights, spread evenly instead of producing NaN.
-    if (sum === 0) {
-        if (values.length === 0)
-            return [];
-        const each = Math.floor(targetSum / values.length);
-        const fitted = values.map(() => each);
-        fitted[0] += targetSum - each * values.length;
-        return fitted;
+    targetSum = Math.max(0, targetSum);
+    const weights = values.map(value => Math.max(0, value));
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const fitted = weights.map(weight => sum
+        ? Math.round(targetSum * (weight / sum))
+        : Math.floor(targetSum / weights.length));
+    let remainder = targetSum - fitted.reduce((a, b) => a + b, 0);
+    // Absorb rounding error without making the first (or any later) row negative.
+    for (let i = 0; i < fitted.length && remainder !== 0; i++) {
+        const correction = Math.max(-fitted[i], remainder);
+        fitted[i] += correction;
+        remainder -= correction;
     }
-
-    const weights = values.map(v => v / sum);
-    const fitted = weights.map(w => Math.round(targetSum * w));
-    const r = targetSum - fitted.reduce((a, b) => a + b, 0);
-    fitted[0] += r;
     return fitted;
 }
 
 /**
- * Distribute available height across one column.
- *
- * @param {object} input
- * @param {number[]} input.heights measured (or target) height per row
- * @param {number|null} input.selectedIndex row index, or null without selection
- * @param {number} [input.selectedHeight] measured height of the selected row
- * @param {number} input.gap window gap in the same unit as the heights
- * @param {number} input.availableHeight usable height of the work area
- * @param {number} [input.minHeight] minimum height for non-selected rows
- * @returns {number[]}
+ * Keep the selected row's height when possible. minHeight is a preferred
+ * aggregate budget for the other rows, not a guaranteed per-row minimum.
+ * When that budget cannot fit, scale all rows instead of producing negatives.
  */
-export function allocateDefault({ heights, selectedIndex, selectedHeight, gap, availableHeight, minHeight = 50 }) {
-    if (heights.length === 1)
-        return [availableHeight];
+export function allocateDefault({ heights, selectedIndex, gap, availableHeight, minHeight = 50 }) {
+    const budget = Math.max(0, availableHeight - (heights.length - 1) * gap);
+    if (heights.length <= 1 ||
+        !Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= heights.length ||
+        budget < (heights.length - 1) * minHeight)
+        return fitProportionally(heights, budget);
 
-    const hasSelection = Number.isInteger(selectedIndex) &&
-        selectedIndex >= 0 && selectedIndex < heights.length;
-    let nonSelected = heights.slice();
-    if (hasSelection)
-        nonSelected.splice(selectedIndex, 1);
-
-    let availableForNonSelected = Math.max(
-        0,
-        availableHeight -
-        (heights.length - 1) * gap -
-        (hasSelection ? selectedHeight : 0)
-    );
-
-    const deficit = Math.max(
-        0, nonSelected.length * minHeight - availableForNonSelected);
-
-    let fitted = fitProportionally(nonSelected, availableForNonSelected + deficit);
-
-    if (hasSelection)
-        fitted.splice(selectedIndex, 0, selectedHeight - deficit);
-
+    const others = heights.filter((_, i) => i !== selectedIndex);
+    const remaining = Math.max(others.length * minHeight,
+        budget - Math.max(0, heights[selectedIndex]));
+    const fitted = fitProportionally(others, remaining);
+    fitted.splice(selectedIndex, 0, budget - remaining);
     return fitted;
 }
 
-/**
- * Give every row the same height. The remainder is dropped.
- */
+/** Equal rows; floor intentionally leaves at most count - 1 units unused. */
 export function allocateEqualHeight({ count, gap, available }) {
-    available -= (count - 1) * gap;
-    return Array.from({ length: count }, () => Math.floor(available / count));
+    const budget = Math.max(0, available - (count - 1) * gap);
+    return Array.from({ length: count }, () => Math.floor(budget / count));
 }

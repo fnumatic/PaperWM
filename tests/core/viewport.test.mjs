@@ -18,7 +18,6 @@ const base = {
     workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     horizontalMargin: 10,
     windowGap: 8,
-    minimumMargin: 6,
 };
 
 test('ensuredX uses the clone target for neighbours', () => {
@@ -63,22 +62,29 @@ test('ensuredX clamps a window that would overflow the right edge', () => {
     assert.equal(ensuredX({ ...base, cloneTargetX: 1500, selectedIndex: 1 }), 1310);
 });
 
-test('ensuredX leaves a margin at the exact right edge', () => {
+test('ensuredX keeps the exact right edge when no horizontal margin is requested', () => {
     assert.equal(ensuredX({
         ...base,
         horizontalMargin: 0,
         cloneTargetX: 1420,
         selectedIndex: 1,
         frameWidth: 600,
-    }), 1314);
+    }), 1320);
 });
 
-test('ensuredX leaves a margin at the exact left edge', () => {
+test('ensuredX keeps the exact left edge when no horizontal margin is requested', () => {
     assert.equal(ensuredX({
         ...base,
         horizontalMargin: 0,
         cloneTargetX: 100,
         selectedIndex: 1,
         frameWidth: 300,
-    }), 6);
+    }), 0);
+});
+
+test('fullscreen overrides center mode and a non-zero work-area origin', () => {
+    assert.equal(ensuredX({
+        ...base, fullscreen: true, focusMode: 'center',
+        workArea: { x: 100, width: 1600 },
+    }), 0);
 });

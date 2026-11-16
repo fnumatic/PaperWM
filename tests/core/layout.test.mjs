@@ -41,7 +41,6 @@ test('allocateDefault keeps the selected row and fits the rest', () => {
         allocateDefault({
             heights: [400, 600],
             selectedIndex: 0,
-            selectedHeight: 400,
             gap: 10,
             availableHeight: 1000,
         }),
@@ -53,7 +52,6 @@ test('allocateDefault applies the minimum height deficit to the selected row', (
         allocateDefault({
             heights: [300, 60, 60],
             selectedIndex: 0,
-            selectedHeight: 300,
             gap: 5,
             availableHeight: 400,
         }),

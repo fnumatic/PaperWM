@@ -2,27 +2,22 @@
 
 Date: 2026-11-16
 
-Status: proposed implementation plan; no runtime changes authorized by this
-document. The user requests a stable logical core isolated from coeffects and
-side effects. Exact APIs below are design proposals, not existing exports.
+Status: implementation underway after user approval. The original milestone
+descriptions below remain the migration roadmap, not a statement that their
+gates all passed.
 
-Progress: M0 (test harness, boundary) and M1 (column allocation extraction) are
-implemented. M2 is complete for arithmetic: work-area adjustment, column target
-widths, per-row planning, the auto-pan decision, the `ensuredX` viewport policy
-and the visibility/placeability predicates live in `core/geometry.js`. M3
-started: linear and directional navigation arithmetic lives in
-`core/navigation.js`; open-window, swap, slurp and barf targets live in
-`core/arrangement.js`; window-rule matching lives in `core/winprops.js`;
-drag-and-drop hit testing lives in `core/dnd.js`.
-Synchronous resize feedback, stacking order, actor work and the
-`ensureViewport` animation path stay in `tiling.js`.
-`node --test tests/core/` covers the extracted arithmetic and the import
-boundary; parity with the legacy implementation was checked on 20,000 generated
-columns, 20,000 rows, 20,000 geometry rounds, 30,000 viewport rounds, 30,000
-navigation rounds, 120,000 visibility checks and 60,000 arrangement checks
-before replacing it. The isolated M0 harness now runs nested enable/disable
-cycles (`scripts/dev-shell.sh --cycle`) and found one teardown crash, fixed.
-State ownership and the remaining lifecycle findings stay open.
+Progress: six stateless modules now isolate allocation, geometry, navigation,
+arrangement, window rules, and DnD decisions. A second review removes redundant
+inputs and corrects regressions; see [the review](../reviews/core-review.md).
+The pure tests include dimension/slot invariants and direct adapter contract
+tests, plus a GJS import smoke. Temporary random parity scripts are not an
+independent correctness gate and are not maintained as the specification.
+
+The existing isolated harness has exercised enable/disable, but the complete
+M0 scenario corpus and interactive desktop verification remain incomplete.
+State ownership, observation reconciliation, actors, and animations still live
+in the shell. No M5 ownership cutover has occurred. The fork's approved support
+range is now GNOME 49–51; this round does not change it.
 
 Baseline: `custom-stable`, commit `2d460db` (`v51.0.0`).
 
