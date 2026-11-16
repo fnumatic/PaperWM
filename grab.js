@@ -8,6 +8,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { Settings, Utils, Tiling, Navigator, Scratch, Gestures } from './imports.js';
 import { DispatcherMode, Easer } from './utils.js';
+import { selectDndTarget, sameDndTarget } from './core/dnd.js';
 
 export let grabbed = false;
 
@@ -217,119 +218,46 @@ export class MoveGrab {
         const columnZoneMarginViz = 100 + halfGap;
         const columnZoneMargin = space.length > 0 ? columnZoneMarginViz : Math.round(space.width / 4);
         const rowZoneMargin = 250 + halfGap;
-
-        let target = null;
         const tilingHeight = space.height - Main.layoutManager.panelBox.height;
 
-        let fakeClone = {
-            targetX: null,
-            targetY: 0,
-            width: columnZoneMargin,
-            height: tilingHeight,
-        };
-        if (space.length > 0) {
-            const lastClone = space[space.length - 1][0].clone;
-            fakeClone.targetX = lastClone.x + lastClone.width + gap;
-        } else {
+        let emptyTargetX = 0;
+        if (space.length === 0) {
             let [sx] = space.viewportToScroll(Math.round(space.width / 2), 0);
-            fakeClone.targetX = sx + halfGap;
+            emptyTargetX = sx + halfGap;
         }
 
-        const columns = [...space, [{ clone: fakeClone }]];
-        for (let j = 0; j < columns.length; j++) {
-            const column = columns[j];
-            const metaWindow = column[0];
-            const clone = metaWindow.clone;
+        const planned = selectDndTarget({
+            columns: space.map(column => ({
+                x: column[0].clone.targetX,
+                width: column[0].clone.width,
+                rows: column.map(mw => ({
+                    x: mw.clone.targetX,
+                    y: mw.clone.targetY,
+                    width: mw.clone.width,
+                    height: mw.clone.height,
+                })),
+            })),
+            x,
+            y,
+            gap,
+            columnZoneMargin,
+            columnZoneMarginViz,
+            rowZoneMargin,
+            emptyTargetX,
+        });
 
-            // FIXME: Non-uniform column width
-            const colX = clone.targetX;
-            const colW = clone.width;
-
-            // Fast forward if pointer is not inside the column or the column zone
-            if (x < colX - gap - columnZoneMargin) {
-                continue;
-            }
-            if (colX + colW < x) {
-                continue;
-            }
-
-            const cx = colX - halfGap;
-            const l = cx - columnZoneMargin;
-            const r = cx + columnZoneMargin;
-            if (l <= x && x <= r) {
-                target = {
-                    position: [j],
-                    center: cx,
-                    originProp: "x",
-                    sizeProp: "width",
-                    marginA: columnZoneMarginViz,
-                    marginB: columnZoneMarginViz,
-                    space,
-                    actorParams: {
-                        y: Main.layoutManager.panelBox.height,
-                        height: tilingHeight,
-                    },
-                };
-                break;
-            }
-
-            // Must be strictly within the column to tile vertically
-            if (x < colX)
-                continue;
-
-            // vertically tiled
-            for (let i = 0; i < column.length + 1; i++) {
-                let clone;
-                if (i < column.length) {
-                    clone = column[i].clone;
-                } else {
-                    let lastClone = column[i - 1].clone;
-                    clone = {
-                        targetX: lastClone.targetX,
-                        targetY: lastClone.targetY + lastClone.height + gap,
-                        width: lastClone.width,
-                        height: 0,
-                    };
-                }
-                const isFirst = i === 0;
-                const isLast = i === column.length;
-                const cy = clone.targetY - halfGap;
-                const t = cy - rowZoneMargin;
-                const b = cy + rowZoneMargin;
-                if (t <= y && y <= b) {
-                    target = {
-                        position: [j, i],
-                        center: cy,
-                        originProp: "y",
-                        sizeProp: "height",
-                        marginA: isFirst ? 0 : rowZoneMargin,
-                        marginB: isLast  ? 0 : rowZoneMargin,
-                        space,
-                        actorParams: {
-                            x: clone.targetX,
-                            width: clone.width,
-                        },
-                    };
-                    break;
-                }
-            }
-        }
+        const target = planned && {
+            ...planned,
+            space,
+            actorParams: planned.originProp === 'x'
+                ? { y: Main.layoutManager.panelBox.height, height: tilingHeight }
+                : { x: planned.anchor.x, width: planned.anchor.width },
+        };
 
         const sameTarget = (a, b) => {
-            if (a === b) {
-                return true;
-            }
-            if (!a || !b) {
+            if (a?.space !== b?.space)
                 return false;
-            }
-            if (a.space !== b.space) {
-                return false;
-            }
-            if (a.position.length !== b.position.length) {
-                return false;
-            }
-            return a.position[0] === b.position[0] &&
-                a.position[1] === b.position[1];
+            return sameDndTarget(a, b);
         };
 
         if (!sameTarget(target, this.dndTarget)) {
