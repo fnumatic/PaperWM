@@ -1,5 +1,9 @@
 import GLib from 'gi://GLib';
 
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+
+const SHELL_VERSION = Number(Config.PACKAGE_VERSION.split('.')[0]);
+
 let pointerWatcher = null;
 
 /**
@@ -16,6 +20,14 @@ export function getPointerWatcher() {
     return pointerWatcher;
 }
 
+/**
+ * Release the shared watcher and every watch it owns.
+ */
+export function destroyPointerWatcher() {
+    pointerWatcher?.destroy();
+    pointerWatcher = null;
+}
+
 class PointerWatch {
     constructor(watcher, interval, callback) {
         this.watcher = watcher;
@@ -24,7 +36,7 @@ class PointerWatch {
     }
 
     remove() {
-        this.watcher._removeWatch(this);
+        this.watcher.removeWatch(this);
     }
 }
 
@@ -34,6 +46,7 @@ class PointerWatcher {
         this._cursorTracker = null;
         this._positionInvalidatedId = 0;
         this._timeoutId = 0;
+        this._timeoutInterval = 0;
         this._pointerX = null;
         this._pointerY = null;
     }
@@ -48,7 +61,7 @@ class PointerWatcher {
         return watch;
     }
 
-    _removeWatch(watch) {
+    removeWatch(watch) {
         const index = this._watches.indexOf(watch);
         if (index === -1)
             return;
@@ -57,24 +70,32 @@ class PointerWatcher {
         this._updateSource();
     }
 
-    _updateSource() {
+    /** Release every watch and the underlying signal or timeout. */
+    destroy() {
+        this._watches.length = 0;
         this._removeSource();
-        if (this._watches.length === 0)
-            return;
+    }
 
-        // This is the GNOME Shell 51 path. Connecting can fail on older
-        // releases where CursorTracker does not yet expose this signal.
-        try {
+    _updateSource() {
+        if (this._watches.length === 0) {
+            this._removeSource();
+            return;
+        }
+
+        if (SHELL_VERSION >= 51) {
+            if (this._positionInvalidatedId)
+                return;
             this._cursorTracker = global.backend.get_cursor_tracker();
             this._positionInvalidatedId = this._cursorTracker.connect(
                 'position-invalidated', () => this._updatePointer());
             return;
-        } catch {
-            this._cursorTracker = null;
-            this._positionInvalidatedId = 0;
         }
 
         const interval = Math.min(...this._watches.map(watch => watch.interval));
+        if (this._timeoutId && this._timeoutInterval === interval)
+            return;
+
+        this._removeSource();
         this._timeoutId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
             interval,
@@ -82,6 +103,7 @@ class PointerWatcher {
                 this._updatePointer();
                 return GLib.SOURCE_CONTINUE;
             });
+        this._timeoutInterval = interval;
         GLib.Source.set_name_by_id(
             this._timeoutId, '[paperwm] pointer watcher');
     }
@@ -97,6 +119,7 @@ class PointerWatcher {
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
             this._timeoutId = 0;
+            this._timeoutInterval = 0;
         }
     }
 

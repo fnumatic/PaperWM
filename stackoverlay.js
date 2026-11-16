@@ -52,6 +52,7 @@ export function disable() {
     previewPointerWatcher?.remove();
     previewPointerWatcher = null;
     disableMultimonitorSupport();
+    PointerWatcher.destroyPointerWatcher();
 }
 
 /**
