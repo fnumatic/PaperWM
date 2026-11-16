@@ -17,14 +17,10 @@ export function layoutWorkArea({ workArea, panelHeight, isPrimary, showTopBar, s
     if (selectedFullscreen) {
         area.y = 0;
     } else if (isPrimary) {
-        if (!showTopBar) {
+        // Without topbar the panel area is usable; the position bar takes it back.
+        if (!showTopBar && !showPositionBar) {
             area.y -= panelHeight;
             area.height += panelHeight;
-
-            if (showPositionBar) {
-                area.y += panelHeight;
-                area.height -= panelHeight;
-            }
         }
     } else if (showPositionBar) {
         area.y += panelHeight;
@@ -110,10 +106,9 @@ export function ensuredX({
     cloneTargetX,
     targetX,
     lastFrameX,
-    hasLastFrame,
     monitorX,
     isVisible,
-    frame,
+    frameWidth,
     workArea,
     horizontalMargin,
     windowGap,
@@ -124,39 +119,39 @@ export function ensuredX({
     const max = min + workArea.width;
 
     let x;
-    if (neighbour || isVisible || !hasLastFrame)
+    if (neighbour || isVisible || lastFrameX === undefined)
         x = Math.round(cloneTargetX) + targetX;
     else
         x = lastFrameX - monitorX;
 
     if (focusMode === 'center') {
         // window switching should centre focus
-        x = workArea.x + Math.round(workArea.width / 2 - frame.width / 2);
+        x = workArea.x + Math.round(workArea.width / 2 - frameWidth / 2);
     } else if (fullscreen) {
         x = 0;
     } else if (focusMode === 'edge') {
         // Align to the closest edge, with special cases for
         // only (center), first (left), and last (right) windows
         if (index === 0 && spaceLength === 1)
-            x = min + Math.round((workArea.width - frame.width) / 2);
-        else if (index === 0 || (Math.abs(x - min) < Math.abs(x + frame.width - max) &&
+            x = min + Math.round((workArea.width - frameWidth) / 2);
+        else if (index === 0 || (Math.abs(x - min) < Math.abs(x + frameWidth - max) &&
             index !== spaceLength - 1))
             x = min + horizontalMargin;
         else
-            x = max - horizontalMargin - frame.width;
-    } else if (frame.width > workArea.width * 0.9 - 2 * (horizontalMargin + windowGap)) {
+            x = max - horizontalMargin - frameWidth;
+    } else if (frameWidth > workArea.width * 0.9 - 2 * (horizontalMargin + windowGap)) {
         // Consider the window to be wide and center it
-        x = min + Math.round((workArea.width - frame.width) / 2);
-    } else if (x + horizontalMargin + frame.width > max) {
+        x = min + Math.round((workArea.width - frameWidth) / 2);
+    } else if (x + horizontalMargin + frameWidth > max) {
         // Align to the right margin
-        x = max - horizontalMargin - frame.width;
+        x = max - horizontalMargin - frameWidth;
     } else if (x < min + horizontalMargin) {
         // Align to the left margin
         x = min + horizontalMargin;
-    } else if (x + frame.width === max) {
+    } else if (x + frameWidth === max) {
         // When opening new windows at the end, in the background, we want to
         // show some minimup margin
-        x = max - minimumMargin - frame.width;
+        x = max - minimumMargin - frameWidth;
     } else if (x === min) {
         // Same for the start (though the case isn't as common)
         x = min + minimumMargin;

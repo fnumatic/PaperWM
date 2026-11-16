@@ -40,7 +40,7 @@ export function slurpPlan({ index, columnLengths, direction, insertAt, rowIndex 
 
     if (from < 0 || from >= columnLengths.length)
         return null;
-    if ((columnLengths[from] ?? 0) === 0)
+    if (columnLengths[from] === 0)
         return null;
 
     switch (insertAt) {

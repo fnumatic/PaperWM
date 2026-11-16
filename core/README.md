@@ -18,7 +18,7 @@ Rules:
 - Inputs are never mutated. Callers may pass frozen data.
 - The same input returns the same result. No clocks, counters, randomness or
   environment reads.
-- Identities are window IDs or indices supplied by the caller, never objects.
+- Positions are column and row indices supplied by the caller, never objects.
 - Requested geometry is not observed geometry. Resize feedback belongs to the
   adapter.
 - Legacy quirks are preserved deliberately and marked where they are not

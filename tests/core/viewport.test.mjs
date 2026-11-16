@@ -12,10 +12,9 @@ const base = {
     cloneTargetX: 300,
     targetX: -100,
     lastFrameX: 120,
-    hasLastFrame: true,
     monitorX: 0,
     isVisible: false,
-    frame: { x: 0, width: 600 },
+    frameWidth: 600,
     workArea: { x: 0, y: 0, width: 1920, height: 1080 },
     horizontalMargin: 10,
     windowGap: 8,
@@ -57,7 +56,7 @@ test('ensuredX aligns the last window to the right margin in edge mode', () => {
 });
 
 test('ensuredX centers a very wide window', () => {
-    assert.equal(ensuredX({ ...base, frame: { x: 0, width: 1800 } }), 60);
+    assert.equal(ensuredX({ ...base, frameWidth: 1800 }), 60);
 });
 
 test('ensuredX clamps a window that would overflow the right edge', () => {
@@ -70,7 +69,7 @@ test('ensuredX leaves a margin at the exact right edge', () => {
         horizontalMargin: 0,
         cloneTargetX: 1420,
         selectedIndex: 1,
-        frame: { x: 0, width: 600 },
+        frameWidth: 600,
     }), 1314);
 });
 
@@ -80,6 +79,6 @@ test('ensuredX leaves a margin at the exact left edge', () => {
         horizontalMargin: 0,
         cloneTargetX: 100,
         selectedIndex: 1,
-        frame: { x: 0, width: 300 },
+        frameWidth: 300,
     }), 6);
 });

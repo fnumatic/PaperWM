@@ -12,11 +12,11 @@
  * returns an array containing NaN.
  */
 export function fitProportionally(values, targetSum) {
-    let sum = values.reduce((a, b) => a + b, 0);
-    let weights = values.map(v => v / sum);
+    const sum = values.reduce((a, b) => a + b, 0);
+    const weights = values.map(v => v / sum);
 
-    let fitted = values.map((_h, i) => Math.round(targetSum * weights[i]));
-    let r = targetSum - fitted.reduce((a, b) => a + b, 0);
+    const fitted = weights.map(w => Math.round(targetSum * w));
+    const r = targetSum - fitted.reduce((a, b) => a + b, 0);
     fitted[0] += r;
     return fitted;
 }
